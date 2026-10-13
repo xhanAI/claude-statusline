@@ -143,7 +143,7 @@ The live bar redraws once a second; the GIFs are smoother (12 fps). Regenerate t
 | life | Conway's game of life, a new world every 30 s |
 | snake | a snake touring the canvas, longer as the context fills up |
 | orbit | strokes only: a tiny globe outline with three satellites orbiting it, see-through (braille, 16x12 dots) |
-| smiley | a face whose expression is the mood: smiles and blinks (calm), focuses with darting eyes (working), grins and sweats (fire), sleeps with a z (idle), frets (warn), gasps (alarm), beams ^^ (clean) |
+| smiley | a shaded 3D face (sextants, lit from the top left) whose expression is the mood: smiles and blinks (calm), focuses with darting eyes (working), grins and sweats (fire), sleeps with a z (idle), frets (warn), gasps (alarm), beams ^^ (clean) |
 | planet | a lit, turning lava planet with an atmosphere, in a see-through sky (sextants, see below) |
 | rain | the 3-row matrix rain |
 
@@ -151,8 +151,8 @@ The effects keep their own colours and wear the mood on top: busy makes them fas
 idle dims and slows them, warn tints amber, alarm pulses red, clean flashes green.
 **orbit**, **smiley** and **planet** push the canvas as far as a status line goes. Claude Code refreshes it at most once a second
 (`refreshInterval` minimum is 1, events are debounced at 300 ms), so frame rate can't go up; detail can.
-`orbit` and `smiley` draw strokes with braille: 2x4 square dots per character, 16x12 in all, and empty dots let the
-terminal show through. `planet` fills instead, with Unicode *sextants* (U+1FB00), 2x3 solid pixels per character instead of the 1x2 of `▀`:
+`orbit` draws strokes with braille: 2x4 square dots per character, 16x12 in all, and empty dots let the
+terminal show through. `planet` and `smiley` fill instead, with Unicode *sextants* (U+1FB00), 2x3 solid pixels per character instead of the 1x2 of `▀`:
 16x9 pixels in the same 8x3 space, each one averaged from 4 samples, and each cell gets the two colours
 that best fit its six pixels. The planet's surface wears the lava's mood colours.
 Sextants are drawn natively by VTE terminals (GNOME Terminal, Ptyxis, Tilix), kitty, WezTerm, foot and

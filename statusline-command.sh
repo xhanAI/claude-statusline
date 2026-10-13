@@ -270,7 +270,7 @@ rain2() {
 #   snake   a snake touring the canvas; it grows as the context fills up
 #   planet  3x the pixels (sextant glyphs, 16x9): a lit, turning lava planet in a see-through sky
 #   orbit   strokes only, braille 16x12: a tiny globe (just its outline) with three satellites orbiting it
-#   smiley  a face, braille 16x12: its expression is the mood (smiles, focuses, sweats, sleeps, frets, gasps)
+#   smiley  a shaded face, sextants 16x9: its expression is the mood (smiles, focuses, grins, sleeps, frets, gasps)
 canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
   mapfile -t ART < <(LC_ALL=C awk -v fx="$1" -v t="$2" -v mood="$3" -v five="${five%.*}" -v ctx="${used%.*}" '
     function clamp(x){ return x < 0 ? 0 : (x > 255 ? 255 : int(x)) }
@@ -439,6 +439,44 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
         lavapal(0.75); rgb(R * 0.5 * w + 60 * w, G * 0.5 * w + 90 * w, B * 0.5 * w + 160 * w); OP = w > 0.25; return }
       if (hash(int(u) * 17 + int(v) * 131) > 0.94) { w = 0.6 + 0.4 * sin(T * 2 + u); rgb(230 * w, 230 * w, 255 * w); OP = 1; return }
       OP = 0 }
+    # smiley: a shaded ball on the same 16x9 sextant canvas, lit from the top left, with the face
+    # carved in as smooth shapes (supersampled, so their edges blend). the expression is the mood.
+    function band(d, w) { return d < 0 ? -d < w : d < w }                       # |d| < w
+    function ell(x, y, cx, cy, rx, ry) { return ((x - cx) / rx)^2 + ((y - cy) / ry)^2 < 1 }
+    function feature(X, Y,   ex, i, s, dx, w) {             # 1 = dark feature, 2 = blush, 3 = mouth inside, 0 = skin
+      dx = 0; if (mood == "working") dx = (int(t) % 4 == 1) ? -0.06 : (int(t) % 4 == 3) ? 0.06 : 0
+      for (i = -1; i <= 1; i += 2) { ex = 0.5 * i + dx * 1.6        # each eye centred in its own character cell
+        if (mood == "idle" || (mood == "calm" && int(t) % 6 == 0)) {             # shut: a gentle downward curve
+          if (band(Y - (0.02 + 1.4 * (X - ex)^2), 0.12) && band(X - ex, 0.19)) return 1 }
+        else if (mood == "clean") {                                                 # happy ^ ^
+          if (band(Y - (-0.14 + 1.2 * (X - ex < 0 ? ex - X : X - ex)), 0.1) && band(X - ex, 0.17)) return 1 }
+        else if (mood == "fire" || mood == "alarm") { if (ell(X, Y, ex, -0.05, 0.17, 0.27)) return 1 }  # wide
+        else if (ell(X, Y, ex, -0.05, 0.13, 0.22)) return 1 }                                         # open
+      if (mood == "clean" || mood == "calm") for (i = -1; i <= 1; i += 2) if (ell(X, Y, 0.72 * i, 0.3, 0.14, 0.1)) return 2
+      if (mood == "calm")    return band(Y - (0.6 - 1.1 * X * X), 0.13) && band(X, 0.45)               # smile
+      if (mood == "working") return band(Y - 0.58, 0.09) && band(X, 0.26)                            # focused
+      if (mood == "idle")    return ell(X, Y, 0, 0.58, 0.12, 0.1)                                     # tiny o
+      if (mood == "warn")    return band(Y - (0.58 + 0.07 * sin(X * 16)), 0.09) && band(X, 0.38)     # wobbly
+      if (mood == "alarm")   return ell(X, Y, 0, 0.58, 0.17, 0.22) ? 3 : 0                            # gasp
+      if (Y > 0.36 && Y < 0.36 + 0.4 * (1 - (X / 0.48)^2) && band(X, 0.48)) return 3                  # grin (clean, fire)
+      return 0 }
+    function face(u, v,   X, Y, d2, Z, l, sp, f, rim, sx, sy) {
+      X = (u * 0.5 - 4) / 2.9; Y = (v * 0.6667 - 3) / 2.9; d2 = X * X + Y * Y; OP = 0
+      if ((mood == "fire" || mood == "warn") && ell(X, Y, 0.95, -0.45 + 0.08 * (int(t) % 2), 0.09, 0.15)) {   # sweat drop
+        rgb(120, 190, 255); OP = 1; return }
+      if (mood == "idle") { sx = 1.05; sy = -0.75 - 0.12 * (int(t / 2) % 3)                       # a z drifting up
+        if (band(X - sx, 0.14) && (band(Y - sy, 0.04) || band(Y - sy - 0.24, 0.04) || band((Y - sy) + (X - sx) - 0.12, 0.05) && band(Y - sy - 0.12, 0.12))) {
+          rgb(190, 190, 255); OP = 1; return } }
+      if (d2 >= 1) return
+      Z = sqrt(1 - d2); l = -0.35 * X - 0.65 * Y + 0.67 * Z; l = l < 0 ? 0 : l
+      lavapal(0.3 + 0.65 * l); sp = l ^ 14; rim = (1 - Z)^2
+      R = R * (1 - 0.3 * rim) + 255 * sp; G = G * (1 - 0.3 * rim) + 245 * sp; B = B * (1 - 0.3 * rim) + 230 * sp
+      f = feature(X, Y)
+      if (f >= 1 && mood == "idle") rgb(150, 140, 235)                                       # asleep: light lines on the dark face
+      else if (f == 1) { lavapal(0); R = R * 0.4 + 8; G = G * 0.4 + 5; B = B * 0.4 + 8 }          # eyes, mouth line
+      else if (f == 3) { lavapal(0); R = R * 0.5 + 90; G = G * 0.3 + 12; B = B * 0.3 + 25 }     # inside of an open mouth
+      else if (f == 2) { R = mix(R, 255, 0.35); G = mix(G, 110, 0.35); B = mix(B, 140, 0.35) }   # blush
+      OP = 1 }
     function sextant(p) {                                           # 6-bit pattern -> the glyph (UTF-8 bytes)
       if (p == 0) return " "; if (p == 63) return "\342\226\210"  # █
       if (p == 21) return "\342\226\214"; if (p == 42) return "\342\226\220"   # ▌ ▐
@@ -448,7 +486,8 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
       for (py = 0; py < 9; py++) for (px = 0; px < 16; px++) {
         sr = sg = sb = n = 0
         for (i = 0; i < 2; i++) for (j = 0; j < 2; j++) {
-          planet(px + 0.25 + i * 0.5, py + 0.25 + j * 0.5)
+          if (SCENE == "face") face(px + 0.25 + i * 0.5, py + 0.25 + j * 0.5)
+          else planet(px + 0.25 + i * 0.5, py + 0.25 + j * 0.5)
           if (OP) { sr += R; sg += G; sb += B; n++ } }
         k = px + py * 16; Q[k] = n >= 2
         if (n) { PR[k] = clamp(sr / n); PG[k] = clamp(sg / n); PB[k] = clamp(sb / n) } }
@@ -584,7 +623,7 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
       else sp = (mood == "fire") ? 2.2 : (mood == "working") ? 1.6 : (mood == "idle") ? 0.25 : 1
       amp = (mood == "fire" || mood == "working") ? 1 : (mood == "idle") ? 0.25 : 0.55
       T = t * sp; L_e = -1
-      if (fx == "smiley") { smiley(); exit }
+      if (fx == "smiley") { SCENE = "face"; ultra(); exit }
       if (fx == "orbit" || fx == "planet") { T = t * (mood == "fire" ? 2 : mood == "working" ? 1.4 : mood == "idle" ? 0.3 : 1)
                                              if (fx == "orbit") ultra2(); else ultra(); exit }
       split("6 0,5 0,4 1,4 2,5 3,6 3", m, ",")                # lava moon: a "(" crescent, top right
