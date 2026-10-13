@@ -185,7 +185,7 @@ render_max() {
     ab=$(echo "$gs" | awk '/^# branch.ab/{a=$3; b=$4; sub(/\+/,"",a); sub(/-/,"",b); s=""; if(a>0) s=s"↑"a; if(b>0) s=s"↓"b; print s}')
     dirty=$(echo "$gs" | grep -vc '^#')
     L+=" $(fg 200 150 255)⎇ ${br}${R}"
-    if [ "$dirty" -gt 0 ]; then L+=" $(fg 250 200 70)●${dirty}${R}"; else L+=" $(fg 80 220 140)✔${R}"; fi
+    if [ "$dirty" -gt 0 ]; then L+=" $(fg 250 200 70)● ${dirty}${R}"; else L+=" $(fg 80 220 140)✔${R}"; fi
     [ -n "$ab" ] && L+=" $(fg 120 220 255)${ab}${R}"
   fi
   local load cpu mem temp h
@@ -417,7 +417,7 @@ render_xhanai() {
   L="$P0  $(fg 110 170 255)${B}${cwd/#$HOME/\~}${R}"
   if [ -n "$br" ]; then
     L+=" ${GR}on${R} $(fg 200 150 255)${br}${R}"
-    [ "$dirty" -gt 0 ] && L+=" $(fg 250 200 70)●${dirty}${R}"
+    [ "$dirty" -gt 0 ] && L+=" $(fg 250 200 70)● ${dirty}${R}"
   fi
   printf '%s\n' "$L"
 

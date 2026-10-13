@@ -12,6 +12,24 @@ user@host /path/to/dir │ ◆ Sonnet │ ctx 12%
 - Percentages are green < 50%, yellow < 80%, red above. "claude" is Claude orange.
 - The 5h number only appears when Claude Code reports rate limits (subscription plans).
 
+## Cheat sheet
+
+```bash
+# on
+git clone git@github.com:xhanAI/claude-statusline.git ~/repos/active/claude-statusline
+cd ~/repos/active/claude-statusline && ./install.sh     # needs jq; restart Claude Code
+
+# pick a look
+echo xhanAI  > ~/.claude/statusline-profile   # lava (or: acid tunnel aurora ember warp pulse)
+echo default > ~/.claude/statusline-profile   # simplest, 2 lines
+
+# update
+cd ~/repos/active/claude-statusline && git pull && ./install.sh
+
+# off (back to Claude Code's own bar)
+jq 'del(.statusLine)' ~/.claude/settings.json > /tmp/s.json && mv /tmp/s.json ~/.claude/settings.json
+```
+
 ## Install
 
 Needs `jq`.
@@ -37,7 +55,7 @@ The **max** profile:
 ⠃⠶⡄⢈⠃⠰ Session name in a gradient │ ◆ Opus 5.5 effort medium 🧠 │ Tue 21:53 v2.1.296
 ⏱ 12m11s │ ✦ claude 2m30s 20% busy │ $0.97 $4.75/h │ +120 −30
 5h 48% ↻ 2h16m │ 7d 26% ↻ 6d10h │ ctx 8% 78k/1.0M │ ♨ cache 94% warm 58m
-user@host ~/repos/x ⎇ main ●3 ↑1 │ cpu 4% ram 49% 38°C │ 🌦️ 13°C
+user@host ~/repos/x ⎇ main ● 3 ↑1 │ cpu 4% ram 49% 38°C │ 🌦️ 13°C
 ```
 
 - Session name, model, effort, thinking / fast mode, output style, ticking clock (the colon blinks), Claude Code version.
@@ -49,7 +67,7 @@ user@host ~/repos/x ⎇ main ●3 ↑1 │ cpu 4% ram 49% 38°C │ 🌦️ 13°
 The **xhanAI** profile: minimal, with a tiny lava lamp on the left:
 
 ```
-▀▀▀▀▀▀▀▀  ~/repos/active/claude-statusline on main ●3
+▀▀▀▀▀▀▀▀  ~/repos/active/claude-statusline on main ● 3
 ▀▀▀▀▀▀▀▀  opus 5.5 med   🌦️ 13°C   v2.1.296
 ▀▀▀▀▀▀▀▀  12m11s ✦ 2m30s   $0.97 4.75/h Σ $19.52   5h 48% 2h06m   ctx 8%   +152 −51
 ```
