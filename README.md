@@ -57,6 +57,18 @@ The path and branch get a line to themselves so their changing length never shif
 Line 2 is the model + effort, weather and version; line 3 is the numbers
 (session time, Claude time, cost + hourly rate, 5h limit + time to reset, context, lines changed).
 
+## Project cost over time
+
+Every refresh, the status line records the session's cost in `~/.claude/cost-ledger/<session-id>`
+(one tiny line: project dir, banked, last), and only when the cost changed. If a resumed session
+restarts its counter, the earlier amount is banked so nothing is lost. A project is the directory
+Claude Code was started in.
+
+- The xhanAI profile shows the project's all-time total after the path: `Σ $23.10`.
+- `claude-cost` lists every project, most expensive first; `claude-cost <dir>` lists that project's sessions.
+
+Only sessions run with this status line are counted; earlier ones aren't in the ledger.
+
 ## Rain style
 
 ```bash

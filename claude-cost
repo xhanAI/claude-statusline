@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# claude-cost: all-time Claude Code cost per project, from the status line's ledger.
+#   claude-cost          every project, most expensive first
+#   claude-cost <dir>    one project (default: current directory with "."), with its sessions
+LEDGER="$HOME/.claude/cost-ledger"
+[ -d "$LEDGER" ] || { echo "No ledger yet; it fills as you use Claude Code with the status line."; exit 0; }
+
+if [ -n "$1" ]; then
+  dir=$(cd "$1" 2>/dev/null && pwd || echo "$1")
+  for f in "$LEDGER"/*; do
+    IFS=$'\t' read -r p b l < "$f"
+    [ "$p" = "$dir" ] && printf '%s\t%s\t%s\n' "$(date -d @"$(stat -c %Y "$f")" '+%Y-%m-%d %H:%M')" "$(awk -v b="$b" -v l="$l" 'BEGIN{printf "%.2f", b+l}')" "${f##*/}"
+  done | sort | awk -F'\t' -v d="$dir" '
+    BEGIN{printf "%s\n\n  %-16s  %9s  %s\n", d, "last active", "cost", "session"}
+    {printf "  %-16s  %9s  %s\n", $1, "$"$2, substr($3,1,8); s+=$2; n++}
+    END{printf "\n  %d sessions, total $%.2f\n", n, s}'
+  exit
+fi
+
+rows=$(for f in "$LEDGER"/*; do
+  IFS=$'\t' read -r p b l < "$f"
+  printf '%s\t%s\t%s\n' "$p" "$(awk -v b="$b" -v l="$l" 'BEGIN{print b+l}')" "$(stat -c %Y "$f")"
+done | awk -F'\t' '{s[$1]+=$2; n[$1]++; if ($3>t[$1]) t[$1]=$3}
+  END{for (p in s) printf "%.2f\t%d\t%s\t%s\n", s[p], n[p], t[p], p}' | sort -t$'\t' -k1,1 -rn)
+
+printf '  %10s  %8s  %-10s  %s\n' total sessions "last" project
+while IFS=$'\t' read -r tot n t p; do
+  printf '  %10s  %8d  %-10s  %s\n' "\$$tot" "$n" "$(date -d @"$t" +%Y-%m-%d)" "${p/#$HOME/\~}"
+done <<< "$rows"
+echo "$rows" | awk -F'\t' '{s+=$1} END{printf "\n  all projects: $%.2f\n", s}'

@@ -10,6 +10,23 @@ cost=$(j .cost.total_cost_usd); five=$(j .rate_limits.five_hour.used_percentage)
 profile=$(cat "$HOME/.claude/statusline-profile" 2>/dev/null)
 now=$(date +%s)
 
+# cost ledger: one tiny file per session in ~/.claude/cost-ledger, holding
+#   project_dir <TAB> banked <TAB> last
+# written only when the session cost changes. if the cost ever drops (a resumed session
+# that restarted its counter), the old amount is banked so nothing is lost.
+# project total = sum over every session file of that project. `claude-cost` prints a report.
+LEDGER="$HOME/.claude/cost-ledger"
+sid=$(j .session_id); proj=$(j .workspace.project_dir); proj=${proj:-$cwd}
+if [ -n "$sid" ] && [ -n "$cost" ] && [ -n "$proj" ]; then
+  lf="$LEDGER/$sid"; banked=0; last=0
+  [ -f "$lf" ] && IFS=$'\t' read -r _ banked last < "$lf"
+  if [ "$cost" != "$last" ]; then
+    banked=$(awk -v b="$banked" -v l="$last" -v c="$cost" 'BEGIN{print (c+0 < l+0) ? b+l : b}')
+    mkdir -p "$LEDGER"; printf '%s\t%s\t%s\n' "$proj" "$banked" "$cost" > "$lf.tmp" && mv "$lf.tmp" "$lf"
+  fi
+fi
+project_total() { [ -d "$LEDGER" ] && cat "$LEDGER"/* 2>/dev/null | awk -F'\t' -v p="$proj" '$1==p{s+=$2+$3} END{printf "%.2f", s}'; }
+
 R=$'\033[0m'; DIM=$'\033[2m'; B=$'\033[1m'
 fg() { printf '\033[38;2;%s;%s;%sm' "$1" "$2" "$3"; }
 SEP="${DIM}$(fg 110 110 140) │ ${R}"
@@ -218,6 +235,12 @@ render_xhanai() {
     br=$(echo "$gs" | awk '/^# branch.head/{print $3}'); dirty=$(echo "$gs" | grep -vc '^#')
     L+=" ${GR}on${R} $(fg 200 150 255)${br}${R}"
     [ "$dirty" -gt 0 ] && L+=" $(fg 250 200 70)●${dirty}${R}"
+  fi
+  # all-time cost of this project (every session started in it), at the end so it shifts nothing
+  local pt; pt=$(project_total)
+  if [ -n "$pt" ] && [ "$pt" != 0.00 ]; then
+    L+="${SP}${GR}Σ${R} $(fg 240 200 90)\$${pt}${R}"
+    [ "$proj" != "$cwd" ] && L+=" ${GR}${proj##*/}${R}"
   fi
   printf '%s\n' "$L"
 
