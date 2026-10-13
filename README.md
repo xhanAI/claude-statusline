@@ -143,7 +143,7 @@ The live bar redraws once a second; the GIFs are smoother (12 fps). Regenerate t
 | life | Conway's game of life, a new world every 30 s |
 | snake | a snake touring the canvas, longer as the context fills up |
 | orbit | strokes only: a tiny globe outline with three satellites orbiting it, see-through (braille, 16x12 dots) |
-| smiley | a shaded 3D face (sextants, lit from the top left) whose expression is the mood: smiles and blinks (calm), focuses with darting eyes (working), grins and sweats (fire), sleeps with a z (idle), frets (warn), gasps (alarm), beams ^^ (clean) |
+| smiley | the classic yellow smiley as pixel art (sextants, 16x9), whose expression is the mood: smiles and blinks (calm), focuses with darting eyes (working), grins and sweats (fire), sleeps with a z (idle), frets (warn), gasps (alarm), beams ^^ (clean) |
 | planet | a lit, turning lava planet with an atmosphere, in a see-through sky (sextants, see below) |
 | rain | the 3-row matrix rain |
 
