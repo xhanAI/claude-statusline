@@ -1,6 +1,8 @@
 # claude-statusline
 
-A colourful two-line status line for Claude Code.
+A colourful, animated status line for Claude Code.
+
+![the xhanAI profile](docs/xhanai.gif)
 
 ```
 ⠰⡄⢈⠛⠰⡄ ⏱ 1h01m │ ✦ claude 2m05s │ 5h 62% ↻ 1h30m
@@ -114,6 +116,15 @@ Cost: ~30 ms per refresh (one `jq`, one `awk` for the lava).
 
 The same canvas can draw other things, borrowed from the badtrippin experiments. Each is a profile name
 (`echo tunnel > ~/.claude/statusline-profile`), or `echo tunnel > ~/.claude/statusline-art` under xhanAI:
+
+| | | | |
+|:-:|:-:|:-:|:-:|
+| <img src="docs/lava.gif" width="150"><br>`lava` | <img src="docs/acid.gif" width="150"><br>`acid` | <img src="docs/tunnel.gif" width="150"><br>`tunnel` | <img src="docs/aurora.gif" width="150"><br>`aurora` |
+| <img src="docs/ember.gif" width="150"><br>`ember` | <img src="docs/warp.gif" width="150"><br>`warp` | <img src="docs/pulse.gif" width="150"><br>`pulse` | <img src="docs/helix.gif" width="150"><br>`helix` |
+| <img src="docs/ripple.gif" width="150"><br>`ripple` | <img src="docs/ecg.gif" width="150"><br>`ecg` | <img src="docs/hourglass.gif" width="150"><br>`hourglass` | <img src="docs/life.gif" width="150"><br>`life` |
+| <img src="docs/snake.gif" width="150"><br>`snake` | <img src="docs/rain.gif" width="150"><br>`rain` |
+
+The live bar redraws once a second; the GIFs are smoother (12 fps). Regenerate them with `tools/make-gifs.py`.
 
 | effect | what it is |
 |---|---|
