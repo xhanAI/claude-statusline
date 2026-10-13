@@ -67,10 +67,14 @@ user@host ~/repos/x ⎇ main ● 3 ↑1 │ cpu 4% ram 49% 38°C │ 🌦️ 13�
 The **xhanAI** profile: minimal, with a tiny lava lamp on the left:
 
 ```
-▀▀▀▀▀▀▀▀  ~/repos/active/claude-statusline on main ● 3
+▀▀▀▀▀▀▀▀  ~/repos/active/claude-statusline on main ● 3  ↑ 1 synced 12m ago
 ▀▀▀▀▀▀▀▀  opus 5.5 med   🌦️ 13°C   v2.1.296
 ▀▀▀▀▀▀▀▀  12m11s ✦ 2m30s   $0.97 4.75/h Σ $19.52   5h 48% 2h06m   ctx 8%   +152 −51
 ```
+
+After the branch: `● 3` changed files, then the remote: `↑ 2` commits not pushed, `↓ 1` commits to pull
+(as of the last fetch), `✓` in sync, `no remote` if the branch was never pushed, and `synced 12m ago`,
+the last fetch, pull or push. The status line never fetches by itself; run `git fetch` to refresh ↓.
 
 The path and branch get a line to themselves so their changing length never shifts anything else.
 Line 2 is the model + effort, weather and version; line 3 is the numbers

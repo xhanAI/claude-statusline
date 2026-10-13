@@ -32,7 +32,8 @@ now=$(date +%s)
 # (older files are "project <TAB> banked <TAB> last"; they are read as project = banked+last.)
 LEDGER="$HOME/.claude/cost-ledger"
 pkey=""
-[ -n "$cwd" ] && { pkey=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null); pkey=${pkey:-$cwd}; }
+gitdir=""   # the shared .git dir, for the time of the last fetch (FETCH_HEAD)
+[ -n "$cwd" ] && { { read -r pkey; read -r gitdir; } < <(git -C "$cwd" rev-parse --path-format=absolute --show-toplevel --git-common-dir 2>/dev/null); pkey=${pkey:-$cwd}; }
 if [ -n "$sid" ] && [ -n "$cost" ] && [ -n "$pkey" ]; then
   lf="$LEDGER/$sid"; last=0
   if [ -f "$lf" ]; then
@@ -59,6 +60,10 @@ fmt() { local s=$(( $1 / 1000 ))
   elif [ "$s" -ge 3600 ]; then printf "%dh%02dm" $((s/3600)) $((s%3600/60))
   elif [ "$s" -ge 60 ]; then printf "%dm%02ds" $((s/60)) $((s%60))
   else printf "%ds" "$s"; fi; }
+# coarse age: now, 12m, 3h, 2d
+ago() { local s=$1
+  if [ "$s" -lt 60 ]; then printf now; elif [ "$s" -lt 3600 ]; then printf '%dm' $((s/60))
+  elif [ "$s" -lt 86400 ]; then printf '%dh' $((s/3600)); else printf '%dd' $((s/86400)); fi; }
 until_() { [ -n "$1" ] || return; local left=$(( ${1%.*} - now )); [ "$left" -gt 0 ] && fmt $((left * 1000)); }
 
 # green -> yellow -> red by percentage
@@ -390,7 +395,7 @@ lava_mood() {
   echo calm; }
 
 render_xhanai() {
-  local GR SP br dirty gs w e L art
+  local GR SP br dirty gs w e L art up ahead behind
   GR=$(fg 120 120 145); SP="   "
   art=${ART_FX:-${STATUSLINE_ART:-$(cat "$HOME/.claude/statusline-art" 2>/dev/null)}}
   case $art in rain|acid|tunnel|aurora|ember|warp|pulse) ;; *) art=lava ;; esac
@@ -398,6 +403,8 @@ render_xhanai() {
   # git first: the lava flashes green when the tree goes from dirty to clean
   if [ -n "$cwd" ] && gs=$(timeout 0.3 git -C "$cwd" --no-optional-locks status --porcelain=v2 --branch 2>/dev/null); then
     br=$(echo "$gs" | awk '/^# branch.head/{print $3}'); dirty=$(echo "$gs" | grep -vc '^#')
+    up=$(echo "$gs" | awk '/^# branch.upstream/{print $3}')
+    read -r ahead behind < <(echo "$gs" | awk '/^# branch.ab/{print substr($3,2), substr($4,2)}')
   fi
   local st="$HOME/.cache/claude-statusline/${sid:-none}" prev=""; clean_until=""
   [ -f "$st" ] && read -r prev clean_until < "$st"
@@ -418,6 +425,18 @@ render_xhanai() {
   if [ -n "$br" ]; then
     L+=" ${GR}on${R} $(fg 200 150 255)${br}${R}"
     [ "$dirty" -gt 0 ] && L+=" $(fg 250 200 70)● ${dirty}${R}"
+    # sync with the remote: ↑ unpushed commits, ↓ commits to pull (as of the last fetch), ✓ in sync
+    if [ -z "$up" ]; then L+="  ${GR}no remote${R}"
+    else
+      [ "${ahead:-0}" -gt 0 ] && L+="  $(fg 120 220 255)↑ ${ahead}${R}"
+      [ "${behind:-0}" -gt 0 ] && L+="  $(fg 255 150 90)↓ ${behind}${R}"
+      [ "${ahead:-0}" -eq 0 ] && [ "${behind:-0}" -eq 0 ] && L+="  $(fg 80 220 140)✓${R}"
+      # last time we talked to the remote: fetch / pull write FETCH_HEAD, fetch / pull / push the upstream's reflog
+      local seen; seen=$(stat -c %Y "$gitdir/FETCH_HEAD" "$gitdir/logs/refs/remotes/$up" 2>/dev/null | sort -n | tail -1)
+      if [ -n "$seen" ]; then
+        if [ $(( now - seen )) -lt 60 ]; then L+=" ${GR}synced just now${R}"; else L+=" ${GR}synced $(ago $(( now - seen ))) ago${R}"; fi
+      fi
+    fi
   fi
   printf '%s\n' "$L"
 
