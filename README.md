@@ -89,6 +89,7 @@ The **xhanAI** profile: minimal, with a tiny lava lamp on the left:
 After the branch: `● 3` changed files, then the remote: `↑ 2` commits not pushed, `↓ 1` commits to pull
 (as of the last fetch), `✓` in sync, `no remote` if the branch was never pushed, and `synced 12m ago`,
 the last fetch, pull or push. The status line never fetches by itself; run `git fetch` to refresh ↓.
+If the session has moved away from the folder Claude Code was started in, the line ends with `started in ~/x`.
 
 The path and branch get a line to themselves so their changing length never shifts anything else.
 Line 2 is the model + effort, weather and version; line 3 is the numbers
@@ -135,7 +136,7 @@ The live bar redraws once a second; the GIFs are smoother (12 fps). Regenerate t
 | ember | doom-style fire licking up from the bottom |
 | warp | stars flying past |
 | pulse | an equalizer; bars jump higher the harder Claude works |
-| helix | a spinning DNA double helix |
+| helix | a spinning DNA double helix, on a see-through background (your terminal shows through) |
 | ripple | raindrops falling on water |
 | ecg | a heartbeat monitor; the pulse races while Claude works |
 | hourglass | the sand that has run through = how much of the 5h limit is used |

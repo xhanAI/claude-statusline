@@ -348,10 +348,10 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
 
     function helix(x, y,   a, y1, y2, z) {
       a = x * 0.8 + T * 2; y1 = 2.5 + 2.4 * sin(a); y2 = 2.5 - 2.4 * sin(a); z = cos(a)
-      rgb(6, 6, 16)
-      if (x % 3 == 1 && (y - y1) * (y - y2) < 0) rgb(45, 45, 70)                # rungs
-      if ((y - y2)^2 < 0.22) rgb(mix(90, 255, (1 - z) / 2) * .4, 40, mix(90, 255, (1 - z) / 2))   # back strand
-      if ((y - y1)^2 < 0.22) rgb(40, mix(90, 255, (1 + z) / 2), mix(90, 255, (1 + z) / 2) * .8) } # front strand
+      TR = 1                                                    # empty: the terminal shows through
+      if (x % 3 == 1 && (y - y1) * (y - y2) < 0) { TR = 0; rgb(45, 45, 70) }    # rungs
+      if ((y - y2)^2 < 0.22) { TR = 0; rgb(mix(90, 255, (1 - z) / 2) * .4, 40, mix(90, 255, (1 - z) / 2)) }  # back strand
+      if ((y - y1)^2 < 0.22) { TR = 0; rgb(40, mix(90, 255, (1 + z) / 2), mix(90, 255, (1 + z) / 2) * .8) } } # front strand
 
     function ripple(x, y,   k, p, cx, cy, age, r, w, s) {
       s = 0
@@ -437,7 +437,7 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
         line = ""
         for (x = 0; x < 8; x++) {
           for (k = 0; k < 2; k++) {
-            y = row * 2 + k
+            y = row * 2 + k; TR = 0
             if (fx == "acid") acid(x, y); else if (fx == "tunnel") tunnel(x, y)
             else if (fx == "aurora") aurora(x, y); else if (fx == "ember") ember(x, y)
             else if (fx == "warp") warp(x, y); else if (fx == "pulse") pulse(x, y)
@@ -446,9 +446,12 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
             else if (fx == "life") life(x, y); else if (fx == "snake") snake(x, y)
             else lava(x, y)
             if (fx != "lava") moodfx()
-            c[k] = clamp(R) ";" clamp(G) ";" clamp(B)
+            c[k] = TR ? "" : clamp(R) ";" clamp(G) ";" clamp(B)    # "" = transparent pixel
           }
-          line = line "\033[38;2;" c[0] "m\033[48;2;" c[1] "m▀"
+          if (c[0] == "" && c[1] == "") line = line "\033[0m "
+          else if (c[1] == "") line = line "\033[0m\033[38;2;" c[0] "m▀"
+          else if (c[0] == "") line = line "\033[0m\033[38;2;" c[1] "m▄"
+          else line = line "\033[38;2;" c[0] "m\033[48;2;" c[1] "m▀"
         }
         print line "\033[0m"
       }
@@ -516,6 +519,8 @@ render_xhanai() {
       fi
     fi
   fi
+  # started somewhere else? say where, at the end so nothing else moves
+  [ -n "$proj" ] && [ "$proj" != "$cwd" ] && L+="   ${GR}started in${R} $(fg 110 170 255)${proj/#$HOME/\~}${R}"
   printf '%s\n' "$L"
 
   # line 2, what: model, weather, version
