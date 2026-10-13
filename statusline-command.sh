@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Claude Code status line.
-#   profile: ~/.claude/statusline-profile  -> "default" (2 lines), "max" (everything, 4 lines) or "xhanAI" (minimal, 2-row rain)
+#   profile: ~/.claude/statusline-profile  -> "default" (2 lines), "max" (everything, 4 lines) or "xhanAI" (minimal, 3 lines)
 #   rain:    ~/.claude/statusline-rain     -> "dots" (default) or "letters"
 input=$(cat)
 j() { echo "$input" | jq -r "$1 // empty"; }
@@ -176,15 +176,15 @@ render_max() {
 }
 
 # ------------------------------------------------------------------ xhanAI
-# matrix rain two rows tall: each column is 8 braille dots high, a head falls through it
-# with a fading trail. prints the top row (arg 0) or the bottom row (arg 1).
+# matrix rain three rows tall: each column is 12 braille dots high, a head falls through it
+# with a fading trail. prints row 0, 1 or 2.
 rain2() {
   local row=$1 out="" c p side cell r d best col g bits
   local rl=(1 2 4 64) rr=(8 16 32 128)
   local glyphs=(ｱ ｲ ｳ ｴ ｵ ｶ ｷ ｸ ｹ ｺ ｻ ｼ ｽ ｾ ｿ ﾀ ﾁ ﾂ ﾃ ﾄ ﾅ ﾆ ﾇ ﾈ ﾉ ﾊ ﾋ ﾌ ﾍ ﾎ ﾏ ﾐ ﾑ ﾒ ﾓ ﾔ ﾕ ﾖ ﾗ ﾘ ﾙ ﾚ ﾛ ﾜ ﾝ 0 1 2 3 4 5 7 8 9)
   local style; style=$(cat "$HOME/.claude/statusline-rain" 2>/dev/null)
   for c in 0 1 2 3 4 5; do
-    p=$(( (now * 2 + c * 5 + c * c) % 11 ))      # head position 0..10 (9,10 = off screen)
+    p=$(( (now * 2 + c * 5 + c * c) % 15 ))      # head position 0..14 (12+ = off screen)
     side=$(( (now / 5 + c) % 2 ))
     bits=0; best=9
     for r in 0 1 2 3; do
@@ -212,16 +212,20 @@ render_xhanai() {
   effort=$(j .effort.level); ver=$(j .version)
   added=$(j .cost.total_lines_added); removed=$(j .cost.total_lines_removed)
 
-  # line 1, where and what: dir, branch, model, weather, version
+  # line 1, where: dir + branch alone, so their changing length never shifts anything else
   L="$(rain2 0)  $(fg 110 170 255)${B}${cwd/#$HOME/\~}${R}"
   if [ -n "$cwd" ] && gs=$(timeout 0.3 git -C "$cwd" --no-optional-locks status --porcelain=v2 --branch 2>/dev/null); then
     br=$(echo "$gs" | awk '/^# branch.head/{print $3}'); dirty=$(echo "$gs" | grep -vc '^#')
     L+=" ${GR}on${R} $(fg 200 150 255)${br}${R}"
     [ "$dirty" -gt 0 ] && L+=" $(fg 250 200 70)●${dirty}${R}"
   fi
+  printf '%s\n' "$L"
+
+  # line 2, what: model, weather, version
+  L="$(rain2 1) "
   if [ -n "$model" ]; then
-    case $effort in low) e=low ;; medium) e=med ;; high) e=high ;; xhigh) e=xhigh ;; *) e=$effort ;; esac
-    L+="${SP}$(fg 255 170 100)$(echo "$model" | tr 'A-Z' 'a-z')${R}${e:+ ${GR}${e}${R}}"
+    case $effort in medium) e=med ;; *) e=$effort ;; esac
+    L+=" $(fg 255 170 100)$(echo "$model" | tr 'A-Z' 'a-z')${R}${e:+ ${GR}${e}${R}}"
   fi
   local wf="$HOME/.cache/claude-statusline-weather"
   if [ ! -f "$wf" ] || [ $(( now - $(stat -c %Y "$wf") )) -gt 1800 ]; then
@@ -233,8 +237,8 @@ render_xhanai() {
   [ -n "$ver" ] && L+="${SP}${GR}v${ver}${R}"
   printf '%s\n' "$L"
 
-  # line 2, numbers: times, money, limit, context, diff
-  L="$(rain2 1) "
+  # line 3, numbers: times, money, limit, context, diff
+  L="$(rain2 2) "
   [ -n "$total" ] && L+=" $(fg 130 180 255)$(fmt "${total%.*}")${R}"
   [ -n "$api" ] && L+=" $(fg 217 119 87)✦ $(fmt "${api%.*}")${R}"
   if [ -n "$cost" ]; then

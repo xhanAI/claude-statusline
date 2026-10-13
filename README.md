@@ -27,7 +27,7 @@ This copies the script to `~/.claude/`, sets `statusLine` in `~/.claude/settings
 ```bash
 echo default > ~/.claude/statusline-profile   # the 2-line bar above
 echo max     > ~/.claude/statusline-profile   # everything, 4 lines
-echo xhanAI  > ~/.claude/statusline-profile   # minimal, 2-row rain
+echo xhanAI  > ~/.claude/statusline-profile   # minimal, 3 lines
 ```
 
 The **max** profile:
@@ -45,14 +45,16 @@ user@host ~/repos/x ⎇ main ●3 ↑1 │ cpu 4% ram 49% 38°C │ 🌦️ 13°
 - Past 90% of the 5h limit the rain turns red and a blinking `⚠ SLOW DOWN` appears.
 - Git branch, dirty file count (or ✔), ahead/behind; CPU load, RAM, CPU temperature; weather from wttr.in (cached 30 min, fetched in the background).
 
-The **xhanAI** profile: minimal, with the rain falling through both lines:
+The **xhanAI** profile: minimal, with the rain falling through all three lines:
 
 ```
-⠁⢀⡇⠸⡇⢀  ~/repos/active/claude-statusline on main ●3   opus 5.5 med   🌦️ 13°C   v2.1.296
-⠀⠸⠀⠀⠀⠸  12m11s ✦ 2m30s   $0.97 4.75/h   5h 48% 2h07m   ctx 8%   +152 −51
+⠀⢰⠀⠀⡆⢸  ~/repos/active/claude-statusline on main ●3
+⠀⠈⠀⢸⠁⠀  opus 5.5 med   🌦️ 13°C   v2.1.296
+⡄⠀⡆⠀⠀⠀  12m11s ✦ 2m30s   $0.97 4.75/h   5h 48% 2h06m   ctx 8%   +152 −51
 ```
 
-Line 1 is where and what (dir, branch, model + effort, weather, version), line 2 is the numbers
+The path and branch get a line to themselves so their changing length never shifts anything else.
+Line 2 is the model + effort, weather and version; line 3 is the numbers
 (session time, Claude time, cost + hourly rate, 5h limit + time to reset, context, lines changed).
 
 ## Rain style
