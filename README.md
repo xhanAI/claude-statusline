@@ -64,7 +64,7 @@ Every refresh, the status line records the session's cost in `~/.claude/cost-led
 restarts its counter, the earlier amount is banked so nothing is lost. A project is the directory
 Claude Code was started in.
 
-- The xhanAI profile shows the project's all-time total after the path: `Σ $23.10`.
+- The xhanAI profile shows the project's all-time total next to the session cost: `$0.97 4.75/h Σ $23.10`.
 - `claude-cost` lists every project, most expensive first; `claude-cost <dir>` lists that project's sessions.
 
 Only sessions run with this status line are counted; earlier ones aren't in the ledger.

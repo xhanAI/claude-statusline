@@ -236,12 +236,6 @@ render_xhanai() {
     L+=" ${GR}on${R} $(fg 200 150 255)${br}${R}"
     [ "$dirty" -gt 0 ] && L+=" $(fg 250 200 70)●${dirty}${R}"
   fi
-  # all-time cost of this project (every session started in it), at the end so it shifts nothing
-  local pt; pt=$(project_total)
-  if [ -n "$pt" ] && [ "$pt" != 0.00 ]; then
-    L+="${SP}${GR}Σ${R} $(fg 240 200 90)\$${pt}${R}"
-    [ "$proj" != "$cwd" ] && L+=" ${GR}${proj##*/}${R}"
-  fi
   printf '%s\n' "$L"
 
   # line 2, what: model, weather, version
@@ -268,6 +262,9 @@ render_xhanai() {
     L+="${SP}$(fg 240 200 90)\$$(printf '%.2f' "$cost")${R}"
     [ -n "$total" ] && [ "${total%.*}" -gt 60000 ] && \
       L+=" ${GR}$(awk -v c="$cost" -v t="$total" 'BEGIN{printf "%.2f/h", c/(t/3600000)}')${R}"
+    # all-time cost of this project (every session started in it)
+    local pt; pt=$(project_total)
+    [ -n "$pt" ] && [ "$pt" != 0.00 ] && L+=" ${GR}Σ${R} $(fg 240 200 90)\$${pt}${R}"
   fi
   if [ -n "$five" ]; then
     L+="${SP}${GR}5h${R} $(heat "$five")$(printf '%.0f' "$five")%${R}"
