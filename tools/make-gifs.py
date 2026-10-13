@@ -106,7 +106,7 @@ def main():
 
         # each effect alone, big pixels
         art_font = ImageFont.truetype(FONT, 26)
-        only = sys.argv[1:]  # e.g. tools/make-gifs.py ultra  -> just that one
+        only = sys.argv[1:]  # e.g. tools/make-gifs.py smiley  -> just that one
         for fx, mood in EFFECTS.items():
             if only and fx not in only: continue
             frames = [draw(cells(run(home, "xhanAI", fx, mood, t))[:3], 18, 36, art_font, ncols=8, pad=6) for t in times]
