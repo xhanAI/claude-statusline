@@ -16,7 +16,7 @@ user@host /path/to/dir │ ◆ Sonnet │ ctx 12%
 
 ```bash
 # on
-git clone git@github.com:xhanAI/claude-statusline.git ~/repos/active/claude-statusline
+git clone https://github.com/xhanAI/claude-statusline.git ~/repos/active/claude-statusline
 cd ~/repos/active/claude-statusline && ./install.sh     # needs jq; restart Claude Code
 
 # pick a look
