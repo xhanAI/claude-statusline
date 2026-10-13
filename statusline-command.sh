@@ -2,12 +2,22 @@
 # Claude Code status line.
 #   profile: ~/.claude/statusline-profile  -> "default" (2 lines), "max" (everything, 4 lines) or "xhanAI" (minimal, 3 lines)
 #   rain:    ~/.claude/statusline-rain     -> "dots" (default) or "letters"
+#   art:     ~/.claude/statusline-art      -> xhanAI only: "lava" (default) or "rain"
 input=$(cat)
-j() { echo "$input" | jq -r "$1 // empty"; }
-cwd=$(j .cwd); model=$(j .model.display_name); used=$(j .context_window.used_percentage)
-total=$(j .cost.total_duration_ms); api=$(j .cost.total_api_duration_ms)
-cost=$(j .cost.total_cost_usd); five=$(j .rate_limits.five_hour.used_percentage); reset=$(j .rate_limits.five_hour.resets_at)
-profile=$(cat "$HOME/.claude/statusline-profile" 2>/dev/null)
+# every field in one jq call (one fork instead of ~20)
+eval "$(jq -r '@sh "
+cwd=\(.cwd // "") model=\(.model.display_name // "") used=\(.context_window.used_percentage // "")
+total=\(.cost.total_duration_ms // "") api=\(.cost.total_api_duration_ms // "") cost=\(.cost.total_cost_usd // "")
+five=\(.rate_limits.five_hour.used_percentage // "") reset=\(.rate_limits.five_hour.resets_at // "")
+wk=\(.rate_limits.seven_day.used_percentage // "") wkr=\(.rate_limits.seven_day.resets_at // "")
+sid=\(.session_id // "") proj=\(.workspace.project_dir // "") transcript=\(.transcript_path // "")
+name=\(.session_name // "") ver=\(.version // "") effort=\(.effort.level // "")
+think=\(.thinking.enabled // "" | tostring) fast=\(.fast_mode // "" | tostring) style=\(.output_style.name // "")
+added=\(.cost.total_lines_added // "") removed=\(.cost.total_lines_removed // "")
+csize=\(.context_window.context_window_size // "") ctok=\(.context_window.total_input_tokens // "")
+hit=\(.prompt_cache.hit_ratio // "") warm=\(.prompt_cache.warm | tostring) cexp=\(.prompt_cache.expires_at // "")
+"' <<< "$input")"
+profile=${STATUSLINE_PROFILE:-$(cat "$HOME/.claude/statusline-profile" 2>/dev/null)}
 now=$(date +%s)
 
 # cost ledger: one tiny file per session in ~/.claude/cost-ledger, holding
@@ -16,7 +26,7 @@ now=$(date +%s)
 # that restarted its counter), the old amount is banked so nothing is lost.
 # project total = sum over every session file of that project. `claude-cost` prints a report.
 LEDGER="$HOME/.claude/cost-ledger"
-sid=$(j .session_id); proj=$(j .workspace.project_dir); proj=${proj:-$cwd}
+proj=${proj:-$cwd}
 if [ -n "$sid" ] && [ -n "$cost" ] && [ -n "$proj" ]; then
   lf="$LEDGER/$sid"; banked=0; last=0
   [ -f "$lf" ] && IFS=$'\t' read -r _ banked last < "$lf"
@@ -101,14 +111,8 @@ render_default() {
 
 # ------------------------------------------------------------------ max
 render_max() {
-  local name ver effort think fast style added removed wk wkr csize ctok hit warm cexp L
+  local L
   local GR; GR=$(fg 160 160 190)
-  name=$(j .session_name); ver=$(j .version); effort=$(j .effort.level)
-  think=$(j .thinking.enabled); fast=$(j .fast_mode); style=$(j .output_style.name)
-  added=$(j .cost.total_lines_added); removed=$(j .cost.total_lines_removed)
-  wk=$(j .rate_limits.seven_day.used_percentage); wkr=$(j .rate_limits.seven_day.resets_at)
-  csize=$(j .context_window.context_window_size); ctok=$(j .context_window.total_input_tokens)
-  hit=$(j .prompt_cache.hit_ratio); warm=$(j .prompt_cache.warm); cexp=$(j .prompt_cache.expires_at)
 
   # line 1, identity: rain, session name in a gradient, model, flags, ticking clock, version
   L="$(rain) $(grad "${name:-Claude Code}" 255 120 200 120 200 255)"
@@ -223,26 +227,109 @@ rain2() {
   done
   printf '%s%s' "$out" "$R"; }
 
-render_xhanai() {
-  local GR SP effort added removed ver br dirty gs w e L
-  GR=$(fg 120 120 145); SP="   "
-  effort=$(j .effort.level); ver=$(j .version)
-  added=$(j .cost.total_lines_added); removed=$(j .cost.total_lines_removed)
+# lava lamp, 8 cells wide and 3 rows tall. each cell is a half block "▀" with its own
+# foreground (top pixel) and background (bottom pixel), so it is an 8x6 true-colour canvas.
+# the plasma is a few overlapping sine waves; the mood picks the palette and the speed.
+#   calm   orange lava, slow            working  hot yellow-white lava, fast (Claude is busy)
+#   idle   deep blue with a moon        warn     dark red-orange (5h or ctx >= 70%)
+#   alarm  red, pulsing (>= 90%)        clean    green flash right after the tree goes clean
+#   fire   white-hot, fastest (burning more than $15/h while working)
+lava() { # lava <time> <mood>  -> fills LAVA[0..2]
+  mapfile -t LAVA < <(awk -v t="$1" -v mood="$2" '
+    function clamp(x){ return x < 0 ? 0 : (x > 255 ? 255 : int(x)) }
+    function mix(a, b, f){ return a + (b - a) * f }
+    # three-stop gradient lo -> mid -> hi, v in 0..1
+    function grad3(v, r0,g0,b0, r1,g1,b1, r2,g2,b2,   f) {
+      if (v < 0.5) { f = v * 2; return clamp(mix(r0,r1,f)) ";" clamp(mix(g0,g1,f)) ";" clamp(mix(b0,b1,f)) }
+      f = (v - 0.5) * 2;      return clamp(mix(r1,r2,f)) ";" clamp(mix(g1,g2,f)) ";" clamp(mix(b1,b2,f)) }
+    function colour(v, x, y,   d1, d2, k) {
+      if (mood == "idle") {
+        if ((x " " y) in moon) return "235;225;170"             # crescent moon
+        return grad3(v, 6,6,24, 30,25,90, 90,70,190) }
+      if (mood == "clean")   return grad3(v, 0,25,10, 30,170,80, 190,255,200)
+      if (mood == "warn")    return grad3(v, 35,0,15, 175,15,50, 255,95,80)
+      if (mood == "alarm") { k = (int(t) % 2) ? 1 : 0.45
+                             return grad3(v, 40*k,0,0, 200*k,10,10, 255*k,70*k,60*k) }
+      if (mood == "working") return grad3(v, 70,5,0, 245,95,0, 255,235,140)
+      if (mood == "fire")    return grad3(v, 120,10,0, 255,150,20, 255,255,240)
+      return grad3(v, 25,0,0, 200,40,0, 255,170,40) }               # calm
+    BEGIN {
+      sp = (mood == "fire") ? 1.6 : (mood == "working") ? 1.1 : (mood == "idle") ? 0.15 : (mood == "alarm") ? 0.8 : 0.35
+      T = t * sp
+      split("6 0,5 0,4 1,4 2,5 3,6 3", m, ",")                # pixels of a "(" crescent, top right
+      for (i in m) moon[m[i]] = 1
+      for (row = 0; row < 3; row++) {
+        line = ""
+        for (x = 0; x < 8; x++) {
+          for (k = 0; k < 2; k++) {
+            y = row * 2 + k
+            v = sin(x * 0.55 + T) + sin(y * 0.75 - T * 1.3) + sin((x + y) * 0.45 + T * 0.7) \
+              + sin(sqrt((x - 3.5 - 2 * sin(T * 0.5))^2 + (y - 2.5 - 1.5 * cos(T * 0.4))^2) * 1.1 - T)
+            v = 0.5 + v / 5                                        # -4..4 -> roughly 0..1, extra contrast
+            v = v < 0 ? 0 : (v > 1 ? 1 : v)
+            if (mood == "working" || mood == "fire") v = v ^ 0.8   # more of the hot end
+            c[k] = colour(v, x, y)
+          }
+          line = line "\033[38;2;" c[0] "m\033[48;2;" c[1] "m▀"
+        }
+        print line "\033[0m"
+      }
+    }')
+}
 
-  # line 1, where: dir + branch alone, so their changing length never shifts anything else
-  L="$(rain2 0)  $(fg 110 170 255)${B}${cwd/#$HOME/\~}${R}"
+# what the lava should feel like right now
+lava_mood() {
+  [ -n "$LAVA_MOOD" ] && { echo "$LAVA_MOOD"; return; }          # forced, for the demo
+  local f=${five%.*} c=${used%.*}; f=${f:-0}; c=${c:-0}
+  if [ "$f" -ge 90 ] || [ "$c" -ge 90 ]; then echo alarm; return; fi
+  [ -n "$clean_until" ] && [ "$now" -lt "$clean_until" ] && { echo clean; return; }
+  local busy=0
+  [ -n "$transcript" ] && [ -f "$transcript" ] && [ $(( now - $(stat -c %Y "$transcript") )) -le 4 ] && busy=1
+  if [ "$busy" -eq 1 ]; then
+    if [ -n "$cost" ] && [ -n "$total" ] && [ "${total%.*}" -gt 600000 ] && \
+       awk -v c="$cost" -v t="$total" 'BEGIN{exit !(c/(t/3600000) > 15)}'; then echo fire; else echo working; fi
+    return
+  fi
+  if [ "$f" -ge 70 ] || [ "$c" -ge 70 ]; then echo warn; return; fi
+  [ "$warm" = false ] && { echo idle; return; }
+  echo calm; }
+
+render_xhanai() {
+  local GR SP br dirty gs w e L art
+  GR=$(fg 120 120 145); SP="   "
+  art=$(cat "$HOME/.claude/statusline-art" 2>/dev/null)
+
+  # git first: the lava flashes green when the tree goes from dirty to clean
   if [ -n "$cwd" ] && gs=$(timeout 0.3 git -C "$cwd" --no-optional-locks status --porcelain=v2 --branch 2>/dev/null); then
     br=$(echo "$gs" | awk '/^# branch.head/{print $3}'); dirty=$(echo "$gs" | grep -vc '^#')
+  fi
+  local st="$HOME/.cache/claude-statusline/${sid:-none}" prev=""; clean_until=""
+  [ -f "$st" ] && read -r prev clean_until < "$st"
+  if [ -n "$dirty" ] && [ "$dirty" != "$prev" ]; then
+    [ "${prev:-0}" -gt 0 ] && [ "$dirty" -eq 0 ] && clean_until=$(( now + 6 ))
+    mkdir -p "${st%/*}"; echo "$dirty ${clean_until}" > "$st"
+  fi
+
+  local P0 P1 P2
+  if [ "$art" = rain ]; then
+    P0="$(rain2 0)"; P1="$(rain2 1)"; P2="$(rain2 2)"
+  else
+    lava "${LAVA_T:-$now}" "$(lava_mood)"; P0=${LAVA[0]}; P1=${LAVA[1]}; P2=${LAVA[2]}
+  fi
+
+  # line 1, where: dir + branch alone, so their changing length never shifts anything else
+  L="$P0  $(fg 110 170 255)${B}${cwd/#$HOME/\~}${R}"
+  if [ -n "$br" ]; then
     L+=" ${GR}on${R} $(fg 200 150 255)${br}${R}"
     [ "$dirty" -gt 0 ] && L+=" $(fg 250 200 70)●${dirty}${R}"
   fi
   printf '%s\n' "$L"
 
   # line 2, what: model, weather, version
-  L="$(rain2 1) "
+  L="$P1 "
   if [ -n "$model" ]; then
     case $effort in medium) e=med ;; *) e=$effort ;; esac
-    L+=" $(fg 255 170 100)$(echo "$model" | tr 'A-Z' 'a-z')${R}${e:+ ${GR}${e}${R}}"
+    L+=" $(fg 255 170 100)${model,,}${R}${e:+ ${GR}${e}${R}}"
   fi
   local wf="$HOME/.cache/claude-statusline-weather"
   if [ ! -f "$wf" ] || [ $(( now - $(stat -c %Y "$wf") )) -gt 1800 ]; then
@@ -255,7 +342,7 @@ render_xhanai() {
   printf '%s\n' "$L"
 
   # line 3, numbers: times, money, limit, context, diff
-  L="$(rain2 2) "
+  L="$P2 "
   [ -n "$total" ] && L+=" $(fg 130 180 255)$(fmt "${total%.*}")${R}"
   [ -n "$api" ] && L+=" $(fg 217 119 87)✦ $(fmt "${api%.*}")${R}"
   if [ -n "$cost" ]; then

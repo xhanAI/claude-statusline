@@ -27,7 +27,7 @@ This copies the script to `~/.claude/`, sets `statusLine` in `~/.claude/settings
 ```bash
 echo default > ~/.claude/statusline-profile   # the 2-line bar above
 echo max     > ~/.claude/statusline-profile   # everything, 4 lines
-echo xhanAI  > ~/.claude/statusline-profile   # minimal, 3 lines
+echo xhanAI  > ~/.claude/statusline-profile   # minimal, 3 lines, lava lamp
 ```
 
 The **max** profile:
@@ -45,17 +45,35 @@ user@host ~/repos/x ⎇ main ●3 ↑1 │ cpu 4% ram 49% 38°C │ 🌦️ 13°
 - Past 90% of the 5h limit the rain turns red and a blinking `⚠ SLOW DOWN` appears.
 - Git branch, dirty file count (or ✔), ahead/behind; CPU load, RAM, CPU temperature; weather from wttr.in (cached 30 min, fetched in the background).
 
-The **xhanAI** profile: minimal, with the rain falling through all three lines:
+The **xhanAI** profile: minimal, with a tiny lava lamp on the left:
 
 ```
-⠀⢰⠀⠀⡆⢸  ~/repos/active/claude-statusline on main ●3
-⠀⠈⠀⢸⠁⠀  opus 5.5 med   🌦️ 13°C   v2.1.296
-⡄⠀⡆⠀⠀⠀  12m11s ✦ 2m30s   $0.97 4.75/h   5h 48% 2h06m   ctx 8%   +152 −51
+▀▀▀▀▀▀▀▀  ~/repos/active/claude-statusline on main ●3
+▀▀▀▀▀▀▀▀  opus 5.5 med   🌦️ 13°C   v2.1.296
+▀▀▀▀▀▀▀▀  12m11s ✦ 2m30s   $0.97 4.75/h Σ $19.52   5h 48% 2h06m   ctx 8%   +152 −51
 ```
 
 The path and branch get a line to themselves so their changing length never shifts anything else.
 Line 2 is the model + effort, weather and version; line 3 is the numbers
-(session time, Claude time, cost + hourly rate, 5h limit + time to reset, context, lines changed).
+(session time, Claude time, cost + hourly rate + project total, 5h limit + time to reset, context, lines changed).
+
+### The lava
+
+Each `▀` has its own top (foreground) and bottom (background) colour, so the 8x3 block is an
+8x6 true-colour canvas. A plasma of overlapping sine waves flows through it; the mood sets palette and speed:
+
+| mood | looks like | when |
+|---|---|---|
+| calm | slow orange lava | default |
+| working | hot, fast, yellow-white | the transcript was written in the last 4 s (Claude is busy) |
+| fire | white-hot, fastest | working and burning more than $15/h |
+| idle | deep blue with a crescent moon, very slow | prompt cache went cold (you've been away) |
+| warn | crimson | 5h limit or context at 70%+ |
+| alarm | red, pulsing | 5h limit or context at 90%+ |
+| clean | green flash for 6 s | the git tree just went from dirty to clean (you committed) |
+
+Run `lava-demo` to watch every mood at 15 fps. `echo rain > ~/.claude/statusline-art` brings back the matrix rain.
+Cost: ~30 ms per refresh (one `jq`, one `awk` for the lava).
 
 ## Project cost over time
 

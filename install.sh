@@ -9,7 +9,7 @@ command -v jq >/dev/null || { echo "jq is required (sudo apt install jq)"; exit 
 cp "$here/statusline-command.sh" "$dest/statusline-command.sh"
 [ -f "$dest/statusline-rain" ] || echo dots > "$dest/statusline-rain"
 
-mkdir -p "$HOME/.local/bin"; cp "$here/claude-cost" "$HOME/.local/bin/claude-cost"
+mkdir -p "$HOME/.local/bin"; cp "$here/claude-cost" "$here/lava-demo" "$HOME/.local/bin/"
 
 settings="$dest/settings.json"
 [ -f "$settings" ] || echo '{}' > "$settings"
