@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Claude Code status line.
 #   profile: ~/.claude/statusline-profile  -> "default" (2 lines), "max" (everything, 4 lines) or "xhanAI" (minimal, 3 lines)
-#            or "acid" / "tunnel" / "aurora" / "ember" / "warp" / "pulse": the xhanAI layout with that art
+#            or any art effect below (acid, tunnel, snake, ...): the xhanAI layout with that art
 #   rain:    ~/.claude/statusline-rain     -> "dots" (default) or "letters"
 #   art:     ~/.claude/statusline-art      -> xhanAI only: "lava" (default), "rain", or any effect above
 input=$(cat)
@@ -262,8 +262,14 @@ rain2() {
 #   ember   doom-style fire licking up from the bottom
 #   warp    stars rushing past
 #   pulse   an equalizer, bars jump higher the harder Claude works
+#   helix   a spinning DNA double helix
+#   ripple  raindrops falling on water
+#   ecg     a heartbeat monitor; the pulse races while Claude works
+#   hourglass  the sand that has run through is how much of the 5h limit is used
+#   life    Conway's game of life, a new world every 30 s
+#   snake   a snake touring the canvas; it grows as the context fills up
 canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
-  mapfile -t ART < <(awk -v fx="$1" -v t="$2" -v mood="$3" '
+  mapfile -t ART < <(awk -v fx="$1" -v t="$2" -v mood="$3" -v five="${five%.*}" -v ctx="${used%.*}" '
     function clamp(x){ return x < 0 ? 0 : (x > 255 ? 255 : int(x)) }
     function mix(a, b, f){ return a + (b - a) * f }
     function frac(x){ return x - int(x) + (x < 0 ? 1 : 0) }
@@ -340,6 +346,75 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
       if (!lit) { rgb(14, 14, 24); return }
       if (f < 0.5) rgb(mix(40, 250, f * 2), 220, 90); else rgb(250, mix(220, 70, (f - .5) * 2), mix(90, 70, (f - .5) * 2)) }
 
+    function helix(x, y,   a, y1, y2, z) {
+      a = x * 0.8 + T * 2; y1 = 2.5 + 2.4 * sin(a); y2 = 2.5 - 2.4 * sin(a); z = cos(a)
+      rgb(6, 6, 16)
+      if (x % 3 == 1 && (y - y1) * (y - y2) < 0) rgb(45, 45, 70)                # rungs
+      if ((y - y2)^2 < 0.22) rgb(mix(90, 255, (1 - z) / 2) * .4, 40, mix(90, 255, (1 - z) / 2))   # back strand
+      if ((y - y1)^2 < 0.22) rgb(40, mix(90, 255, (1 + z) / 2), mix(90, 255, (1 + z) / 2) * .8) } # front strand
+
+    function ripple(x, y,   k, p, cx, cy, age, r, w, s) {
+      s = 0
+      for (k = 0; k < 2; k++) {                                # this drop and the one before
+        p = int(T / 2.5) - k; age = T - p * 2.5
+        cx = hash(p) * 8; cy = hash(p + 0.5) * 6; r = sqrt((x - cx)^2 + (y - cy)^2)
+        if (r < age * 2.4 + 0.5) s += sin((r - age * 2.4) * 2.2) * exp(-age * 0.7) }
+      rgb(0 + 150 * s, 35 + 170 * s, 75 + 180 * s) }
+
+    function beat(p) {                                         # one heartbeat, p in 0..1
+      if (p < 0.10) return 0.15 * sin(p / 0.10 * 3.1416)       # P
+      if (p < 0.16) return 0
+      if (p < 0.18) return -0.25                               # Q
+      if (p < 0.22) return 1                                   # R spike
+      if (p < 0.25) return -0.4                                # S
+      if (p < 0.40) return 0
+      if (p < 0.55) return 0.3 * sin((p - .4) / .15 * 3.1416)  # T
+      return 0 }
+    function ecg(x, y,   v, ty, f) {
+      v = beat(frac(T * 0.45 - (7 - x) * 0.06)); ty = 3.4 - v * 3.2; f = (x + 1) / 8
+      if ((y - ty)^2 < 0.45 || (x == 7 && (y - ty)^2 < 1)) { rgb(30 + 200 * f * f, 120 + 135 * f, 60 + 120 * f * f); return }
+      rgb(0, (x % 4 == 0 || y == 3) ? 22 : 10, 6) }            # the monitor grid
+
+    function hourglass(x, y,   w, used, top, bot, n, i, cell) {
+      w = (y == 0 || y == 5) ? 3 : (y == 1 || y == 4) ? 2 : 1   # half width of the glass per row
+      if (x < 4 - w || x > 3 + w) { rgb(0, 0, 0); return }
+      if (x == 4 - w || x == 3 + w) cell = 1                    # edges are the glass
+      used = five + 0; if (used > 100) used = 100
+      bot = int(used / 100 * 12 + 0.5); top = 12 - bot          # 12 grains per chamber
+      # sand settles at the bottom of each chamber: top fills rows 2,1,0, bottom fills rows 5,4,3
+      n = 0
+      if (y <= 2) { for (i = 2; i > y; i--) n += 2 * ((i == 0) ? 3 : (i == 1) ? 2 : 1)
+                    if (x - (4 - w) < top - n) { rgb(235, 195, 95); return } }
+      else        { for (i = 5; i > y; i--) n += 2 * ((i == 5) ? 3 : (i == 4) ? 2 : 1)
+                    if (x - (4 - w) < bot - n) { rgb(215, 170, 75); return } }
+      if (y >= 3 && top > 0 && (x == 3 || x == 4) && (int(T * 4) + y + x) % 3 == 0) { rgb(250, 215, 120); return }  # falling grain
+      if (cell) rgb(70, 80, 110); else rgb(14, 16, 28) }
+
+    function life(x, y,   e, st, i, j, n, xx, yy, g, h) {
+      e = int(T / 30)
+      if (e != L_e) {                                          # simulate the world once per frame
+        L_e = e; st = int(T) - e * 30
+        for (i = 0; i < 48; i++) A[i] = hash(e * 97 + i) > 0.62
+        for (g = 0; g < st; g++) {
+          for (i = 0; i < 48; i++) { n = 0; xx = i % 8; yy = int(i / 8)
+            for (j = 0; j < 9; j++) if (j != 4) n += A[((xx + j % 3 + 7) % 8) + ((yy + int(j / 3) + 5) % 6) * 8]
+            Bn[i] = (n == 3 || (A[i] && n == 2)) }
+          for (i = 0; i < 48; i++) A[i] = Bn[i] } }
+      if (A[x + y * 8]) hsv(e * 0.13 + (x + y) * 0.04, 0.7, 1); else rgb(8, 10, 18) }
+
+    function sidx(x, y) {                                      # position along a loop through all 48 cells
+      if (y == 0) return x
+      if (x == 0) return 48 - y
+      if (y % 2 == 1) return 8 + (y - 1) * 7 + (7 - x)
+      return 8 + (y - 1) * 7 + (x - 1) }
+    function snake(x, y,   h, len, d, a) {
+      h = int(T * 5) % 48; len = 3 + int((ctx + 0) / 100 * 20)
+      d = (h - sidx(x, y) + 48) % 48
+      if (d < len) { a = 1 - d / len; rgb(mix(20, 170, a), mix(90, 255, a), mix(40, 120, a)); if (d == 0) rgb(230, 255, 200); return }
+      a = (h + 13 + int(T * 5 / 48) * 11) % 48                # the apple
+      if (sidx(x, y) == a) { rgb(255, 60, 70); return }
+      rgb(8, 12, 10) }
+
     # the mood, painted over any effect except lava: tint keeps the brightness, swaps the hue
     function tint(r, g, b, amt,   l) {
       l = (0.3 * R + 0.59 * G + 0.11 * B) / 255
@@ -355,7 +430,7 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
       if (fx == "lava") sp = (mood == "fire") ? 1.6 : (mood == "working") ? 1.1 : (mood == "idle") ? 0.15 : (mood == "alarm") ? 0.8 : 0.35
       else sp = (mood == "fire") ? 2.2 : (mood == "working") ? 1.6 : (mood == "idle") ? 0.25 : 1
       amp = (mood == "fire" || mood == "working") ? 1 : (mood == "idle") ? 0.25 : 0.55
-      T = t * sp
+      T = t * sp; L_e = -1
       split("6 0,5 0,4 1,4 2,5 3,6 3", m, ",")                # lava moon: a "(" crescent, top right
       for (i in m) moon[m[i]] = 1
       for (row = 0; row < 3; row++) {
@@ -366,6 +441,9 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
             if (fx == "acid") acid(x, y); else if (fx == "tunnel") tunnel(x, y)
             else if (fx == "aurora") aurora(x, y); else if (fx == "ember") ember(x, y)
             else if (fx == "warp") warp(x, y); else if (fx == "pulse") pulse(x, y)
+            else if (fx == "helix") helix(x, y); else if (fx == "ripple") ripple(x, y)
+            else if (fx == "ecg") ecg(x, y); else if (fx == "hourglass") hourglass(x, y)
+            else if (fx == "life") life(x, y); else if (fx == "snake") snake(x, y)
             else lava(x, y)
             if (fx != "lava") moodfx()
             c[k] = clamp(R) ";" clamp(G) ";" clamp(B)
@@ -398,7 +476,7 @@ render_xhanai() {
   local GR SP br dirty gs w e L art up ahead behind
   GR=$(fg 120 120 145); SP="   "
   art=${ART_FX:-${STATUSLINE_ART:-$(cat "$HOME/.claude/statusline-art" 2>/dev/null)}}
-  case $art in rain|acid|tunnel|aurora|ember|warp|pulse) ;; *) art=lava ;; esac
+  case $art in rain|acid|tunnel|aurora|ember|warp|pulse|helix|ripple|ecg|hourglass|life|snake) ;; *) art=lava ;; esac
 
   # git first: the lava flashes green when the tree goes from dirty to clean
   if [ -n "$cwd" ] && gs=$(timeout 0.3 git -C "$cwd" --no-optional-locks status --porcelain=v2 --branch 2>/dev/null); then
@@ -480,6 +558,6 @@ render_xhanai() {
 case $profile in
   max) render_max ;;
   xhanAI|xhanai) render_xhanai ;;
-  acid|tunnel|aurora|ember|warp|pulse) ART_FX=$profile render_xhanai ;;   # xhanAI layout, other art
+  acid|tunnel|aurora|ember|warp|pulse|helix|ripple|ecg|hourglass|life|snake) ART_FX=$profile render_xhanai ;;   # xhanAI layout, other art
   *) render_default ;;
 esac

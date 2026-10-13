@@ -20,7 +20,7 @@ git clone https://github.com/xhanAI/claude-statusline.git ~/repos/active/claude-
 cd ~/repos/active/claude-statusline && ./install.sh     # needs jq; restart Claude Code
 
 # pick a look
-echo xhanAI  > ~/.claude/statusline-profile   # lava (or: acid tunnel aurora ember warp pulse)
+echo xhanAI  > ~/.claude/statusline-profile   # lava (or any effect: acid tunnel snake hourglass ...)
 echo default > ~/.claude/statusline-profile   # simplest, 2 lines
 
 # update
@@ -112,6 +112,12 @@ The same canvas can draw other things, borrowed from the badtrippin experiments.
 | ember | doom-style fire licking up from the bottom |
 | warp | stars flying past |
 | pulse | an equalizer; bars jump higher the harder Claude works |
+| helix | a spinning DNA double helix |
+| ripple | raindrops falling on water |
+| ecg | a heartbeat monitor; the pulse races while Claude works |
+| hourglass | the sand that has run through = how much of the 5h limit is used |
+| life | Conway's game of life, a new world every 30 s |
+| snake | a snake touring the canvas, longer as the context fills up |
 | rain | the 3-row matrix rain |
 
 The effects keep their own colours and wear the mood on top: busy makes them faster and brighter,
