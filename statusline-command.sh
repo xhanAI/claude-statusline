@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Claude Code status line.
-#   profile: ~/.claude/statusline-profile  -> "default" (2 lines) or "max" (everything, 4 lines)
+#   profile: ~/.claude/statusline-profile  -> "default" (2 lines), "max" (everything, 4 lines) or "xhanAI" (minimal + pet)
 #   rain:    ~/.claude/statusline-rain     -> "dots" (default) or "letters"
 input=$(cat)
 j() { echo "$input" | jq -r "$1 // empty"; }
@@ -175,4 +175,77 @@ render_max() {
   printf '%s\n' "$L"
 }
 
-if [ "$profile" = max ]; then render_max; else render_default; fi
+# ------------------------------------------------------------------ xhanAI
+# a little cat that reacts to the session: sleeps when the cache went cold (idle),
+# frets near limits, beams after big edits, blinks every few seconds
+pet() {
+  local five_p=${five%.*} ctx_p=${used%.*} added=$1 warm=$2 face col
+  five_p=${five_p:-0}; ctx_p=${ctx_p:-0}
+  if [ "$five_p" -ge 90 ] || [ "$ctx_p" -ge 90 ]; then
+    face='(=ﾟДﾟ=)!'; col="255 95 95"
+    [ $((now % 2)) -eq 1 ] && face='(=ﾟДﾟ=) '
+  elif [ "$warm" = false ]; then
+    face='(=ᴗ_ᴗ=)'; col="140 150 200"
+    case $((now % 3)) in 0) face+='z  ' ;; 1) face+='zZ ' ;; *) face+='zZz' ;; esac
+  elif [ "$five_p" -ge 70 ] || [ "$ctx_p" -ge 70 ]; then
+    face='(=･_･;=)'; col="250 200 70"
+  elif [ "${added:-0}" -ge 200 ]; then
+    face='(=^▽^=)✧'; col="255 170 220"
+    [ $((now % 2)) -eq 1 ] && face='(=^▽^=)♥'
+  else
+    face='(=^･ω･^=)'; col="255 170 220"
+    [ $((now % 5)) -eq 0 ] && face='(=^-ω-^=)'
+  fi
+  printf '%s%s%s' "$(fg $col)" "$face" "$R"; }
+
+render_xhanai() {
+  local D GR dot effort added removed ver warm br dirty gs w e
+  GR=$(fg 150 150 175); D="${DIM}$(fg 110 110 140) · ${R}"
+  effort=$(j .effort.level); ver=$(j .version)
+  warm=$(echo "$input" | jq -r ".prompt_cache.warm")   # j() would drop a literal false
+  added=$(j .cost.total_lines_added); removed=$(j .cost.total_lines_removed)
+
+  # line 1: rain, times, money, limit, context
+  local L="$(rain) "
+  [ -n "$total" ] && L+="$(fg 130 180 255)$(fmt "${total%.*}")${R}"
+  [ -n "$api" ] && L+=" $(fg 217 119 87)✦$(fmt "${api%.*}")${R}"
+  if [ -n "$cost" ]; then
+    L+="${D}$(fg 240 200 90)\$$(printf '%.2f' "$cost")${R}"
+    [ -n "$total" ] && [ "${total%.*}" -gt 60000 ] && \
+      L+="${GR}$(awk -v c="$cost" -v t="$total" 'BEGIN{printf "·%.2f/h", c/(t/3600000)}')${R}"
+  fi
+  if [ -n "$five" ]; then
+    L+="${D}${GR}5h ${R}$(heat "$five")$(printf '%.0f' "$five")%${R}"
+    [ -n "$(until_ "$reset")" ] && L+=" ${DIM}${GR}↻$(until_ "$reset")${R}"
+  fi
+  [ -n "$used" ] && L+="${D}${GR}ctx ${R}$(heat "$used")$(printf '%.0f' "$used")%${R}"
+  printf '%s\n' "$L"
+
+  # line 2: pet, dir + git, model/effort, weather, then diff + version at the very end
+  L="$(pet "$added" "$warm") $(fg 110 170 255)${cwd/#$HOME/\~}${R}"
+  if [ -n "$cwd" ] && gs=$(timeout 0.3 git -C "$cwd" --no-optional-locks status --porcelain=v2 --branch 2>/dev/null); then
+    br=$(echo "$gs" | awk '/^# branch.head/{print $3}'); dirty=$(echo "$gs" | grep -vc '^#')
+    L+=" $(fg 200 150 255)⎇${br}${R}"
+    [ "$dirty" -gt 0 ] && L+="$(fg 250 200 70)●${dirty}${R}"
+  fi
+  if [ -n "$model" ]; then
+    case $effort in low) e=lo ;; medium) e=med ;; high) e=hi ;; xhigh) e=xhi ;; *) e=$effort ;; esac
+    L+="${D}$(fg 255 170 100)$(echo "$model" | tr 'A-Z' 'a-z' | tr -d ' ')${R}${e:+${GR}·${e}${R}}"
+  fi
+  local wf="$HOME/.cache/claude-statusline-weather"
+  if [ ! -f "$wf" ] || [ $(( now - $(stat -c %Y "$wf") )) -gt 1800 ]; then
+    mkdir -p "${wf%/*}"; touch "$wf"
+    ( curl -s -m 5 'https://wttr.in/?format=%c%t' > "$wf.tmp" && mv "$wf.tmp" "$wf" ) >/dev/null 2>&1 &
+  fi
+  w=$(tr -d '\n+' < "$wf" 2>/dev/null | sed 's/  */ /g')
+  [ -n "$w" ] && [ ${#w} -lt 20 ] && L+="${D}${w}"
+  [ -n "$added" ] && L+="${D}$(fg 80 220 140)+${added}${R}$(fg 255 95 95)−${removed:-0}${R}"
+  [ -n "$ver" ] && L+=" ${DIM}${GR}v${ver}${R}"
+  printf '%s\n' "$L"
+}
+
+case $profile in
+  max) render_max ;;
+  xhanAI|xhanai) render_xhanai ;;
+  *) render_default ;;
+esac

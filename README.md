@@ -27,6 +27,7 @@ This copies the script to `~/.claude/`, sets `statusLine` in `~/.claude/settings
 ```bash
 echo default > ~/.claude/statusline-profile   # the 2-line bar above
 echo max     > ~/.claude/statusline-profile   # everything, 4 lines
+echo xhanAI  > ~/.claude/statusline-profile   # minimal, with a pet cat
 ```
 
 The **max** profile:
@@ -43,6 +44,16 @@ user@host ~/repos/x ⎇ main ●3 ↑1 │ cpu 4% ram 49% 38°C │ 🌦️ 13°
 - 5h and 7d limits with reset countdowns, context % with tokens, prompt-cache hit rate and how long it stays warm.
 - Past 90% of the 5h limit the rain turns red and a blinking `⚠ SLOW DOWN` appears.
 - Git branch, dirty file count (or ✔), ahead/behind; CPU load, RAM, CPU temperature; weather from wttr.in (cached 30 min, fetched in the background).
+
+The **xhanAI** profile:
+
+```
+⠃⠶⡄⢈⠃⠰ 12m11s ✦2m30s · $0.97·4.75/h · 5h 48% ↻2h09m · ctx 8%
+(=^･ω･^=) ~/repos/x ⎇main●3 · opus5.5·med · 🌦️ 13°C · +42−7 v2.1.296
+```
+
+The cat reacts to the session: blinks every few seconds, sleeps `(=ᴗ_ᴗ=)zZ` once the prompt cache goes cold (you've been idle),
+frets `(=･_･;=)` past 70% of the 5h limit or context, panics `(=ﾟДﾟ=)!` past 90%, and beams `(=^▽^=)♥` after 200+ changed lines.
 
 ## Rain style
 
