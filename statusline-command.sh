@@ -3,7 +3,7 @@ input=$(cat)
 j() { echo "$input" | jq -r "$1 // empty"; }
 cwd=$(j .cwd); model=$(j .model.display_name); used=$(j .context_window.used_percentage)
 total=$(j .cost.total_duration_ms); api=$(j .cost.total_api_duration_ms)
-five=$(j .rate_limits.five_hour.used_percentage); reset=$(j .rate_limits.five_hour.resets_at)
+cost=$(j .cost.total_cost_usd); five=$(j .rate_limits.five_hour.used_percentage); reset=$(j .rate_limits.five_hour.resets_at)
 
 R=$'\033[0m'; DIM=$'\033[2m'; B=$'\033[1m'
 fg() { printf '\033[38;2;%s;%s;%sm' "$1" "$2" "$3"; }
@@ -60,6 +60,7 @@ spin+="$R"
 line="$spin "
 [ -n "$total" ] && line+="$(fg 130 180 255)⏱ ${B}$(fmt "${total%.*}")${R}"
 [ -n "$api" ] && line+="${SEP}$(fg 217 119 87)✦ claude ${B}$(fmt "${api%.*}")${R}"
+[ -n "$cost" ] && line+="${SEP}$(fg 240 200 90)\$${B}$(printf '%.2f' "$cost")${R}"
 if [ -n "$five" ]; then
   line+="${SEP}$(fg 160 160 190)5h ${R}$(heat "$five")${B}$(printf '%.0f' "$five")%${R}"
   if [ -n "$reset" ]; then
