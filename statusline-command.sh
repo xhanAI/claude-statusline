@@ -269,7 +269,8 @@ rain2() {
 #   life    Conway's game of life, a new world every 30 s
 #   snake   a snake touring the canvas; it grows as the context fills up
 #   planet  3x the pixels (sextant glyphs, 16x9): a lit, turning lava planet in a see-through sky
-#   ultra   strokes only, braille 16x12: a tiny globe (just its outline) with three satellites orbiting it
+#   orbit   strokes only, braille 16x12: a tiny globe (just its outline) with three satellites orbiting it
+#   smiley  a face, braille 16x12: its expression is the mood (smiles, focuses, sweats, sleeps, frets, gasps)
 canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
   mapfile -t ART < <(LC_ALL=C awk -v fx="$1" -v t="$2" -v mood="$3" -v five="${five%.*}" -v ctx="${used%.*}" '
     function clamp(x){ return x < 0 ? 0 : (x > 255 ? 255 : int(x)) }
@@ -478,7 +479,7 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
             line = line "\033[38;2;" fa "m\033[48;2;" fb "m" sextant(bits) } }
         print line "\033[0m" } }
 
-    # ultra: strokes only. a wireframe globe drawn in braille (2x4 square dots per cell, 16x12 in all):
+    # orbit: strokes only. a wireframe globe drawn in braille (2x4 square dots per cell, 16x12 in all):
     # just the outline, with three satellites (body + solar panels) on their own orbits.
     # empty dots are see-through; the far side is dimmer; the colours are the lava mood palette.
     function plot(x, y, z, lvl, dx, dy,   sx, sy, k) {          # a 3D point (+ a screen offset in dots) -> a dot
@@ -520,6 +521,53 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
         x = r * cos(u); z = r * sin(u); y = -x * s; x = x * c
         turn(x, y, z, j == 0 ? 1.6 : 0.7 - j * 0.15, 1, j == 0) } }
 
+    # smiley: a face in braille (16x12 dots, see-through) whose expression is the mood.
+    function dot(x, y, r, g, b,   k) {
+      x = int(x + 0.5); y = int(y + 0.5); if (x < 0 || x > 15 || y < 0 || y > 11) return
+      k = x + y * 16; D[k] = 1; DR[k] = r; DG[k] = g; DB[k] = b }
+    function arc(cx, cy, r, a0, a1, ry,   a) {                      # angles in degrees, 0 = right, 90 = down
+      for (a = a0; a <= a1; a += 4) dot(cx + r * cos(a * 0.017453), cy + ry * sin(a * 0.017453), FR, FG, FB) }
+    function eyes(kind, dx,   i, x, o) {                       # eye columns 5 and 10, symmetric around 7.5
+      for (i = 0; i < 2; i++) { x = (i ? 10 : 5) + dx; o = i ? -1 : 1   # o points to the nose
+        if (kind == "open")  { dot(x, 3, FR,FG,FB); dot(x, 4, FR,FG,FB) }
+        if (kind == "shut")  { dot(x, 4, FR,FG,FB); dot(x + o, 4, FR,FG,FB) }
+        if (kind == "happy") { dot(x - 1, 4, FR,FG,FB); dot(x, 3, FR,FG,FB); dot(x + 1, 4, FR,FG,FB) }
+        if (kind == "wide")  { dot(x, 3, FR,FG,FB); dot(x - o, 3, FR,FG,FB); dot(x, 4, FR,FG,FB); dot(x - o, 4, FR,FG,FB) } } }
+    function smiley(   i, k, cx, cy, j, b, line, px, py, z) {
+      for (i = 0; i < 192; i++) D[i] = 0
+      lavapal(0.9); FR = R; FG = G; FB = B
+      arc(7.5, 5.5, 5.5, 0, 360, 5.4)                                      # the face
+      if (mood == "working") {                                             # focused, eyes darting
+        eyes("open", (int(t) % 4 == 1) ? -1 : (int(t) % 4 == 3) ? 1 : 0)
+        for (i = 6; i <= 9; i++) dot(i, 8, FR, FG, FB) }
+      else if (mood == "fire") {                                           # wide eyes, big grin, sweat
+        eyes("wide", 0); arc(7.5, 7, 3, 10, 170, 2); for (i = 5; i <= 10; i++) dot(i, 7, FR, FG, FB)
+        dot(14, 3 + int(t) % 2, 110, 190, 255); dot(14, 4 + int(t) % 2, 110, 190, 255) }
+      else if (mood == "idle") {                                           # asleep, a z drifting up
+        eyes("shut", 0); for (i = 7; i <= 8; i++) dot(i, 8, FR, FG, FB)
+        z = 2 - int(t / 2) % 3                                             # the z climbs 2 rows, then starts over
+        dot(14, z, 200, 200, 255); dot(15, z, 200, 200, 255); dot(14, z + 1, 200, 200, 255)
+        dot(14, z + 2, 200, 200, 255); dot(15, z + 2, 200, 200, 255) }
+      else if (mood == "warn") {                                           # worried, wavy mouth
+        eyes("open", 0); for (i = 5; i <= 10; i++) dot(i, 8 + (i % 2), FR, FG, FB)
+        dot(14, 3, 110, 190, 255); dot(14, 4, 110, 190, 255) }
+      else if (mood == "alarm") {                                          # shocked
+        eyes("wide", 0); arc(7.5, 8, 1.6, 0, 360, 1.4) }
+      else if (mood == "clean") {                                          # happy
+        eyes("happy", 0); arc(7.5, 6.5, 2.8, 20, 160, 2.2) }
+      else {                                                               # calm: a soft smile and a blink
+        eyes(int(t) % 6 == 0 ? "shut" : "open", 0); arc(7.5, 6.5, 2.6, 35, 145, 1.8) }
+      for (cy = 0; cy < 3; cy++) {
+        line = ""
+        for (cx = 0; cx < 8; cx++) {
+          b = 0; k = -1
+          for (j = 0; j < 8; j++) {
+            px = cx * 2 + (j >= 4); py = cy * 4 + j % 4
+            if (D[px + py * 16]) { b += (j % 4 == 3) ? (j >= 4 ? 128 : 64) : 2^((j % 4) + (j >= 4) * 3); k = px + py * 16 } }
+          if (!b) { line = line "\033[0m "; continue }
+          line = line "\033[0m\033[38;2;" clamp(DR[k]) ";" clamp(DG[k]) ";" clamp(DB[k]) "m" sprintf("%c%c%c", 226, 160 + int(b / 64), 128 + b % 64) }
+        print line "\033[0m" } }
+
     # the mood, painted over any effect except lava: tint keeps the brightness, swaps the hue
     function tint(r, g, b, amt,   l) {
       l = (0.3 * R + 0.59 * G + 0.11 * B) / 255
@@ -536,8 +584,9 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
       else sp = (mood == "fire") ? 2.2 : (mood == "working") ? 1.6 : (mood == "idle") ? 0.25 : 1
       amp = (mood == "fire" || mood == "working") ? 1 : (mood == "idle") ? 0.25 : 0.55
       T = t * sp; L_e = -1
-      if (fx == "ultra" || fx == "planet") { T = t * (mood == "fire" ? 2 : mood == "working" ? 1.4 : mood == "idle" ? 0.3 : 1)
-                                             if (fx == "ultra") ultra2(); else ultra(); exit }
+      if (fx == "smiley") { smiley(); exit }
+      if (fx == "orbit" || fx == "planet") { T = t * (mood == "fire" ? 2 : mood == "working" ? 1.4 : mood == "idle" ? 0.3 : 1)
+                                             if (fx == "orbit") ultra2(); else ultra(); exit }
       split("6 0,5 0,4 1,4 2,5 3,6 3", m, ",")                # lava moon: a "(" crescent, top right
       for (i in m) moon[m[i]] = 1
       for (row = 0; row < 3; row++) {
@@ -586,7 +635,7 @@ render_xhanai() {
   local GR SP br dirty gs w e L art up ahead behind
   GR=$(fg 120 120 145); SP="   "
   art=${ART_FX:-${STATUSLINE_ART:-$(cat "$HOME/.claude/statusline-art" 2>/dev/null)}}
-  case $art in rain|acid|tunnel|aurora|ember|warp|pulse|helix|ripple|ecg|hourglass|life|snake|ultra|planet) ;; *) art=lava ;; esac
+  case $art in rain|acid|tunnel|aurora|ember|warp|pulse|helix|ripple|ecg|hourglass|life|snake|orbit|planet|smiley) ;; *) art=lava ;; esac
 
   # git first: the lava flashes green when the tree goes from dirty to clean
   if [ -n "$cwd" ] && gs=$(timeout 0.3 git -C "$cwd" --no-optional-locks status --porcelain=v2 --branch 2>/dev/null); then
@@ -670,6 +719,6 @@ render_xhanai() {
 case $profile in
   max) render_max ;;
   xhanAI|xhanai) render_xhanai ;;
-  acid|tunnel|aurora|ember|warp|pulse|helix|ripple|ecg|hourglass|life|snake|ultra|planet) ART_FX=$profile render_xhanai ;;   # xhanAI layout, other art
+  acid|tunnel|aurora|ember|warp|pulse|helix|ripple|ecg|hourglass|life|snake|orbit|planet|smiley) ART_FX=$profile render_xhanai ;;   # xhanAI layout, other art
   *) render_default ;;
 esac

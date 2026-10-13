@@ -17,7 +17,7 @@ FPS, SECONDS = 12, 3
 # effect -> the mood it is shown in (the liveliest one that still reads as "the effect")
 EFFECTS = {"lava": "calm", "rain": "calm", "acid": "calm", "tunnel": "calm", "aurora": "calm",
            "ember": "calm", "warp": "calm", "pulse": "working", "helix": "calm", "ripple": "calm",
-           "ecg": "working", "hourglass": "calm", "life": "calm", "snake": "calm", "planet": "calm", "ultra": "calm"}
+           "ecg": "working", "hourglass": "calm", "life": "calm", "snake": "calm", "planet": "calm", "orbit": "calm", "smiley": "calm"}
 
 INPUT = ('{"cwd":"%s/repos/active/claude-statusline","session_id":"gif","model":{"display_name":"Opus 5.5"},'
          '"effort":{"level":"medium"},"version":"2.1.300","cost":{"total_cost_usd":3.42,"total_duration_ms":2580000,'

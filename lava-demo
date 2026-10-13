@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # lava-demo [effect|all]: watch the xhanAI art cycle through every mood at 15 fps. Ctrl+C to stop.
-#   effects: lava (default) acid tunnel aurora ember warp pulse helix ripple ecg hourglass life snake ultra planet; "all" walks through every one
+#   effects: lava (default) acid tunnel aurora ember warp pulse helix ripple ecg hourglass life snake orbit planet smiley; "all" walks through every one
 script="$HOME/.claude/statusline-command.sh"
 input='{"cwd":"'"$PWD"'","model":{"display_name":"Opus 5.5"},"effort":{"level":"medium"},"version":"demo",
         "cost":{"total_duration_ms":1800000,"total_api_duration_ms":600000},
         "rate_limits":{"five_hour":{"used_percentage":42}},"context_window":{"used_percentage":45}}'
-fxs=("${1:-lava}"); [ "$1" = all ] && fxs=(lava acid tunnel aurora ember warp pulse helix ripple ecg hourglass life snake ultra planet)
+fxs=("${1:-lava}"); [ "$1" = all ] && fxs=(lava acid tunnel aurora ember warp pulse helix ripple ecg hourglass life snake orbit planet smiley)
 moods=(calm working fire idle warn alarm clean)
 trap 'printf "\033[?25h\n"; exit' INT
 printf '\033[?25l\033[2J'

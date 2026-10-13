@@ -29,7 +29,7 @@ cd ~/repos/active/claude-statusline && ./install.sh     # needs jq; restart Clau
 echo xhanAI  > ~/.claude/statusline-profile   # lava (or any effect: acid tunnel snake hourglass ...)
 echo default > ~/.claude/statusline-profile   # simplest, 2 lines
 echo max     > ~/.claude/statusline-profile   # everything, 4 lines
-# animations (xhanAI layout): lava acid tunnel aurora ember warp pulse helix ripple ecg hourglass life snake ultra planet
+# animations (xhanAI layout): lava acid tunnel aurora ember warp pulse helix ripple ecg hourglass life snake orbit planet smiley
 echo snake   > ~/.claude/statusline-profile
 
 # preview the animations (own terminal, Ctrl+C to stop)
@@ -123,7 +123,7 @@ The same canvas can draw other things, borrowed from the badtrippin experiments.
 | <img src="docs/lava.gif" width="150"><br>`lava` | <img src="docs/acid.gif" width="150"><br>`acid` | <img src="docs/tunnel.gif" width="150"><br>`tunnel` | <img src="docs/aurora.gif" width="150"><br>`aurora` |
 | <img src="docs/ember.gif" width="150"><br>`ember` | <img src="docs/warp.gif" width="150"><br>`warp` | <img src="docs/pulse.gif" width="150"><br>`pulse` | <img src="docs/helix.gif" width="150"><br>`helix` |
 | <img src="docs/ripple.gif" width="150"><br>`ripple` | <img src="docs/ecg.gif" width="150"><br>`ecg` | <img src="docs/hourglass.gif" width="150"><br>`hourglass` | <img src="docs/life.gif" width="150"><br>`life` |
-| <img src="docs/snake.gif" width="150"><br>`snake` | <img src="docs/rain.gif" width="150"><br>`rain` | <img src="docs/ultra.gif" width="150"><br>`ultra` | <img src="docs/planet.gif" width="150"><br>`planet` |
+| <img src="docs/smiley.gif" width="150"><br>`smiley` | <img src="docs/snake.gif" width="150"><br>`snake` | <img src="docs/rain.gif" width="150"><br>`rain` | <img src="docs/orbit.gif" width="150"><br>`orbit` | <img src="docs/planet.gif" width="150"><br>`planet` |
 
 The live bar redraws once a second; the GIFs are smoother (12 fps). Regenerate them with `tools/make-gifs.py`.
 
@@ -142,15 +142,16 @@ The live bar redraws once a second; the GIFs are smoother (12 fps). Regenerate t
 | hourglass | the sand that has run through = how much of the 5h limit is used |
 | life | Conway's game of life, a new world every 30 s |
 | snake | a snake touring the canvas, longer as the context fills up |
-| ultra | strokes only: a tiny globe outline with three satellites orbiting it, see-through (braille, 16x12 dots) |
+| orbit | strokes only: a tiny globe outline with three satellites orbiting it, see-through (braille, 16x12 dots) |
+| smiley | a face whose expression is the mood: smiles and blinks (calm), focuses with darting eyes (working), grins and sweats (fire), sleeps with a z (idle), frets (warn), gasps (alarm), beams ^^ (clean) |
 | planet | a lit, turning lava planet with an atmosphere, in a see-through sky (sextants, see below) |
 | rain | the 3-row matrix rain |
 
 The effects keep their own colours and wear the mood on top: busy makes them faster and brighter,
 idle dims and slows them, warn tints amber, alarm pulses red, clean flashes green.
-**ultra** and **planet** push the canvas as far as a status line goes. Claude Code refreshes it at most once a second
+**orbit**, **smiley** and **planet** push the canvas as far as a status line goes. Claude Code refreshes it at most once a second
 (`refreshInterval` minimum is 1, events are debounced at 300 ms), so frame rate can't go up; detail can.
-`ultra` draws strokes with braille: 2x4 square dots per character, 16x12 in all, and empty dots let the
+`orbit` and `smiley` draw strokes with braille: 2x4 square dots per character, 16x12 in all, and empty dots let the
 terminal show through. `planet` fills instead, with Unicode *sextants* (U+1FB00), 2x3 solid pixels per character instead of the 1x2 of `▀`:
 16x9 pixels in the same 8x3 space, each one averaged from 4 samples, and each cell gets the two colours
 that best fit its six pixels. The planet's surface wears the lava's mood colours.
