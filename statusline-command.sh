@@ -269,7 +269,7 @@ rain2() {
 #   life    Conway's game of life, a new world every 30 s
 #   snake   a snake touring the canvas; it grows as the context fills up
 #   planet  3x the pixels (sextant glyphs, 16x9): a lit, turning lava planet in a see-through sky
-#   ultra   strokes only, braille 16x12: a small wireframe globe with satellites orbiting it, see-through
+#   ultra   strokes only, braille 16x12: a tiny globe (just its outline) with three satellites orbiting it
 canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
   mapfile -t ART < <(LC_ALL=C awk -v fx="$1" -v t="$2" -v mood="$3" -v five="${five%.*}" -v ctx="${used%.*}" '
     function clamp(x){ return x < 0 ? 0 : (x > 255 ? 255 : int(x)) }
@@ -479,25 +479,24 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
         print line "\033[0m" } }
 
     # ultra: strokes only. a wireframe globe drawn in braille (2x4 square dots per cell, 16x12 in all):
-    # outline, two turning meridians and the equator, with three satellites on their own orbits.
+    # just the outline, with three satellites (body + solar panels) on their own orbits.
     # empty dots are see-through; the far side is dimmer; the colours are the lava mood palette.
-    function plot(x, y, z, lvl,   sx, sy, k) {                 # a 3D point on the unit scene -> a dot
-      sx = int(7.5 + x * 3.4 + 0.5); sy = int(5.5 - y * 3.4 + 0.5)
+    function plot(x, y, z, lvl, dx, dy,   sx, sy, k) {          # a 3D point (+ a screen offset in dots) -> a dot
+      sx = int(7.5 + x * 2.6 + 0.5) + dx; sy = int(5.5 - y * 2.6 + 0.5) + dy
       if (sx < 0 || sx > 15 || sy < 0 || sy > 11) return
       k = sx + sy * 16; if (lvl > D[k]) D[k] = lvl }
-    function turn(x, y, z, lvl, ring,   a, c, s, x1, z1, y1, z2) {
+    function turn(x, y, z, lvl, ring, big,   a, c, s, x1, z1, y1, z2) {
       a = T * 0.45; c = cos(a); s = sin(a); x1 = x * c + z * s; z1 = -x * s + z * c   # spin
       c = cos(0.42); s = sin(0.42); y1 = y * c - z1 * s; z2 = y * s + z1 * c           # tilt towards us
       if (ring && z2 < 0 && x1 * x1 + y1 * y1 < 1) return                              # ring hidden by the globe
       if (!ring && z2 < 0) return                                                      # globe: front side only
-      plot(x1, y1, z2, lvl) }
+      plot(x1, y1, z2, lvl, 0, 0)
+      if (big) { plot(x1, y1, z2, lvl, 1, 0); plot(x1, y1, z2, lvl, 0, 1); plot(x1, y1, z2, lvl, 1, 1)   # 2x2 body
+                 plot(x1, y1, z2, lvl * 0.6, -1, 0); plot(x1, y1, z2, lvl * 0.6, 2, 1) } }      # solar panels
     function ultra2(   i, u, la, lo, k, cx, cy, j, b, m, line, best, px, py) {
       for (i = 0; i < 192; i++) D[i] = 0
-      for (u = 0; u < 6.2832; u += 0.04) plot(cos(u), sin(u), 0, 0.7)                  # the outline
-      for (lo = 0; lo < 2; lo++) for (u = 0; u < 6.2832; u += 0.05)                    # two meridians, turning
-        turn(cos(u) * sin(lo * 1.5708), sin(u), cos(u) * cos(lo * 1.5708), 0.85, 0)
-      for (u = 0; u < 6.2832; u += 0.05) turn(cos(u), 0, sin(u), 1, 0)                  # the equator
-      sat(1.55, 0.5, 0, 1.3); sat(1.9, -0.9, 2.1, 0.8); sat(1.35, 1.35, 4.2, 1.7)     # satellites
+      for (u = 0; u < 6.2832; u += 0.05) plot(cos(u), sin(u), 0, 0.75, 0, 0)            # the outline
+      sat(2.3, 0.35, 0, 1.1); sat(2.0, -0.8, 2.1, 0.75); sat(1.7, 1.3, 4.2, 1.5)      # satellites
       lavapal(0.92); split(R " " G " " B, HI, " "); lavapal(0.55); split(R " " G " " B, LO, " ")
       for (cy = 0; cy < 3; cy++) {
         line = ""
@@ -516,10 +515,10 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
     # the trail shows which way it moves even at one frame a second; behind the globe it is hidden.
     function sat(r, inc, ph, sp,   j, u, x, y, z, c, s) {
       c = cos(inc); s = sin(inc)
-      for (j = 3; j >= 0; j--) {
-        u = (T * sp + ph) - j * 0.16 - T * 0.45                 # cancel the globe spin: orbits do not turn with it
+      for (j = 2; j >= 0; j--) {
+        u = (T * sp + ph) - j * 0.2 - T * 0.45                 # cancel the globe spin: orbits do not turn with it
         x = r * cos(u); z = r * sin(u); y = -x * s; x = x * c
-        turn(x, y, z, j == 0 ? 1.6 : 0.75 - j * 0.15, 1) } }
+        turn(x, y, z, j == 0 ? 1.6 : 0.7 - j * 0.15, 1, j == 0) } }
 
     # the mood, painted over any effect except lava: tint keeps the brightness, swaps the hue
     function tint(r, g, b, amt,   l) {
