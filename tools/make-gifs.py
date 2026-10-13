@@ -5,7 +5,7 @@ Feeds statusline-command.sh fake input frame by frame (LAVA_T = the clock, LAVA_
 parses its ANSI output and draws it with Pillow. Runs with a throwaway HOME so it never touches
 the real cost ledger or caches.  Usage: tools/make-gifs.py   (writes docs/*.gif)
 """
-import os, re, subprocess, tempfile
+import os, re, subprocess, sys, tempfile
 from PIL import Image, ImageDraw, ImageFont
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -17,7 +17,7 @@ FPS, SECONDS = 12, 3
 # effect -> the mood it is shown in (the liveliest one that still reads as "the effect")
 EFFECTS = {"lava": "calm", "rain": "calm", "acid": "calm", "tunnel": "calm", "aurora": "calm",
            "ember": "calm", "warp": "calm", "pulse": "working", "helix": "calm", "ripple": "calm",
-           "ecg": "working", "hourglass": "calm", "life": "calm", "snake": "calm"}
+           "ecg": "working", "hourglass": "calm", "life": "calm", "snake": "calm", "ultra": "calm"}
 
 INPUT = ('{"cwd":"%s/repos/active/claude-statusline","session_id":"gif","model":{"display_name":"Opus 5.5"},'
          '"effort":{"level":"medium"},"version":"2.1.300","cost":{"total_cost_usd":3.42,"total_duration_ms":2580000,'
@@ -70,6 +70,14 @@ def draw(rows, cw, ch, font, ncols=None, pad=0):
                         if bits >> bit & 1:
                             cx, cy = X + cw * (0.3 + 0.4 * bx), Y + ch * (0.14 + 0.24 * by)
                             d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=fg)
+                elif 0x1FB00 <= ord(c) <= 0x1FB3B or c in "▌▐█":  # sextants: 2x3 solid pixels
+                    if c in "▌▐█": bits = {"▌": 21, "▐": 42, "█": 63}[c]
+                    else: n = ord(c) - 0x1FB00 + 1; bits = n + (n >= 21) + (n + (n >= 21) >= 42)
+                    for i in range(6):
+                        x0, y0 = X + (i % 2) * cw // 2, Y + (i // 2) * ch // 3
+                        d.rectangle([x0, y0, x0 + cw // 2 - 1, y0 + ch // 3 - 1], fill=fg if bits >> i & 1 else bg)
+                elif c == "▄":
+                    d.rectangle([X, Y + ch // 2, X + cw - 1, Y + ch - 1], fill=fg)
                 elif c != " ": d.text((X + cw / 2, Y + ch / 2), c, font=font, fill=fg, anchor="mm")
     return img
 
@@ -98,10 +106,13 @@ def main():
 
         # each effect alone, big pixels
         art_font = ImageFont.truetype(FONT, 26)
+        only = sys.argv[1:]  # e.g. tools/make-gifs.py ultra  -> just that one
         for fx, mood in EFFECTS.items():
+            if only and fx not in only: continue
             frames = [draw(cells(run(home, "xhanAI", fx, mood, t))[:3], 18, 36, art_font, ncols=8, pad=6) for t in times]
             save(frames, f"{OUT}/{fx}.gif")
 
+        if only: return
         # the whole xhanAI bar, lava working
         bar_font = ImageFont.truetype(FONT, 15)
         frames = [draw(cells(run(home, "xhanAI", "lava", "working", t)), 9, 18, bar_font, pad=10) for t in times]

@@ -268,8 +268,9 @@ rain2() {
 #   hourglass  the sand that has run through is how much of the 5h limit is used
 #   life    Conway's game of life, a new world every 30 s
 #   snake   a snake touring the canvas; it grows as the context fills up
+#   ultra   the limit: 3x the pixels (sextant glyphs, 16x9), a lit turning lava planet in a see-through sky
 canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
-  mapfile -t ART < <(awk -v fx="$1" -v t="$2" -v mood="$3" -v five="${five%.*}" -v ctx="${used%.*}" '
+  mapfile -t ART < <(LC_ALL=C awk -v fx="$1" -v t="$2" -v mood="$3" -v five="${five%.*}" -v ctx="${used%.*}" '
     function clamp(x){ return x < 0 ? 0 : (x > 255 ? 255 : int(x)) }
     function mix(a, b, f){ return a + (b - a) * f }
     function frac(x){ return x - int(x) + (x < 0 ? 1 : 0) }
@@ -285,13 +286,15 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
       else if (i == 3) rgb(p,q,v); else if (i == 4) rgb(u,p,v); else rgb(v,p,q) }
     function hash(n){ return frac(sin(n * 12.9898) * 43758.5453) }
 
-    function lava(x, y,   v, k) {
+    function lava(x, y,   v) {
       v = sin(x * 0.55 + T) + sin(y * 0.75 - T * 1.3) + sin((x + y) * 0.45 + T * 0.7) \
         + sin(sqrt((x - 3.5 - 2 * sin(T * 0.5))^2 + (y - 2.5 - 1.5 * cos(T * 0.4))^2) * 1.1 - T)
       v = 0.5 + v / 5; v = v < 0 ? 0 : (v > 1 ? 1 : v)
       if (mood == "working" || mood == "fire") v = v ^ 0.8
-      if (mood == "idle") { if ((x " " y) in moon) { rgb(235,225,170); return }
-                            grad3(v, 6,6,24, 30,25,90, 90,70,190); return }
+      if (mood == "idle" && (x " " y) in moon) { rgb(235,225,170); return }
+      lavapal(v) }
+    function lavapal(v,   k) {                                 # the lava colours of each mood
+      if (mood == "idle")    { grad3(v, 6,6,24, 30,25,90, 90,70,190); return }
       if (mood == "working") { grad3(v, 0,12,40, 0,140,255, 190,255,255); return }
       if (mood == "fire")    { grad3(v, 45,0,45, 255,0,170, 255,225,255); return }
       if (mood == "warn")    { grad3(v, 30,18,0, 235,175,0, 255,255,160); return }
@@ -415,6 +418,65 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
       if (sidx(x, y) == a) { rgb(255, 60, 70); return }
       rgb(8, 12, 10) }
 
+    # ultra: the limit. sextant characters (2x3 solid pixels per cell, drawn natively by VTE terminals)
+    # give a 16x9 canvas; every pixel is 4 samples averaged; each cell gets the two colours that fit
+    # its six pixels best. the scene: a lit, turning lava planet (mood palette) with an atmosphere,
+    # in a see-through sky with a few stars.
+    function planet(u, v,   X, Y, d2, Z, lon, lat, w, n, l, sp, rim) {
+      X = (u * 0.5 - 4) / 2.75; Y = (v * 0.6667 - 3) / 2.75       # pixels are 1/2 x 1/3 of a cell
+      d2 = X * X + Y * Y
+      if (d2 < 1) {
+        Z = sqrt(1 - d2); lon = atan2(X, Z) + T * 0.35; lat = atan2(Y, sqrt(X * X + Z * Z))
+        w = sin(lon * 2.2 + T * 0.3) + sin(lat * 3.4 - T * 0.5) + sin((lon + lat) * 1.9 + T * 0.4)           + sin(sqrt((lon - 1)^2 + lat^2) * 3 - T * 0.6)
+        w = 0.5 + w / 5; w = w < 0 ? 0 : (w > 1 ? 1 : w); lavapal(w)
+        l = -0.55 * X - 0.45 * Y + 0.7 * Z; l = l < 0 ? 0 : l      # light from the top left
+        sp = l ^ 12; n = 0.12 + 0.95 * l; rim = (1 - Z)^3
+        rgb(R * n + 255 * sp + 120 * rim, G * n + 230 * sp + 160 * rim, B * n + 210 * sp + 255 * rim)
+        OP = 1; return }
+      if (d2 < 1.35) { w = (1.35 - d2) / 0.35; w = w * w                # atmosphere glow
+        lavapal(0.75); rgb(R * 0.5 * w + 60 * w, G * 0.5 * w + 90 * w, B * 0.5 * w + 160 * w); OP = w > 0.25; return }
+      if (hash(int(u) * 17 + int(v) * 131) > 0.94) { w = 0.6 + 0.4 * sin(T * 2 + u); rgb(230 * w, 230 * w, 255 * w); OP = 1; return }
+      OP = 0 }
+    function sextant(p) {                                           # 6-bit pattern -> the glyph (UTF-8 bytes)
+      if (p == 0) return " "; if (p == 63) return "\342\226\210"  # █
+      if (p == 21) return "\342\226\214"; if (p == 42) return "\342\226\220"   # ▌ ▐
+      p = p - 1 - (p > 21) - (p > 42)
+      return sprintf("%c%c%c%c", 240, 159, 172, 128 + p) }
+    function ultra(   px, py, i, j, n, sr, sg, sb, cx, cy, k, bits, best, d, e, pa, pb, fa, fb, line, na, nb, ar, ag, ab, br, bg_, bb) {
+      for (py = 0; py < 9; py++) for (px = 0; px < 16; px++) {
+        sr = sg = sb = n = 0
+        for (i = 0; i < 2; i++) for (j = 0; j < 2; j++) {
+          planet(px + 0.25 + i * 0.5, py + 0.25 + j * 0.5)
+          if (OP) { sr += R; sg += G; sb += B; n++ } }
+        k = px + py * 16; Q[k] = n >= 2
+        if (n) { PR[k] = clamp(sr / n); PG[k] = clamp(sg / n); PB[k] = clamp(sb / n) } }
+      for (cy = 0; cy < 3; cy++) {
+        line = ""
+        for (cx = 0; cx < 8; cx++) {
+          for (i = 0; i < 6; i++) C[i] = cx * 2 + i % 2 + (cy * 3 + int(i / 2)) * 16   # sextant bit order
+          # the two most different opaque pixels seed the two colours
+          best = -1; pa = pb = -1
+          for (i = 0; i < 6; i++) if (Q[C[i]]) for (j = i; j < 6; j++) if (Q[C[j]]) {
+            d = (PR[C[i]] - PR[C[j]])^2 + (PG[C[i]] - PG[C[j]])^2 + (PB[C[i]] - PB[C[j]])^2
+            if (d > best) { best = d; pa = C[i]; pb = C[j] } }
+          if (pa < 0) { line = line "\033[0m "; continue }          # all sky
+          bits = fb = na = nb = ar = ag = ab = br = bg_ = bb = 0
+          for (i = 0; i < 6; i++) { k = C[i]
+            if (!Q[k]) { fb = 1; continue }                           # see-through pixel
+            d = (PR[k]-PR[pa])^2 + (PG[k]-PG[pa])^2 + (PB[k]-PB[pa])^2
+            e = (PR[k]-PR[pb])^2 + (PG[k]-PG[pb])^2 + (PB[k]-PB[pb])^2
+            if (d <= e) { bits += 2^i; ar += PR[k]; ag += PG[k]; ab += PB[k]; na++ }
+            else { br += PR[k]; bg_ += PG[k]; bb += PB[k]; nb++ } }
+          if (fb) {                                                   # some sky: opaque pixels in fg, sky = terminal
+            bits = 0; sr = sg = sb = n = 0
+            for (i = 0; i < 6; i++) if (Q[C[i]]) { bits += 2^i; sr += PR[C[i]]; sg += PG[C[i]]; sb += PB[C[i]]; n++ }
+            line = line "\033[0m\033[38;2;" int(sr/n) ";" int(sg/n) ";" int(sb/n) "m" sextant(bits) }
+          else {
+            fa = int(ar/na) ";" int(ag/na) ";" int(ab/na)
+            fb = nb ? int(br/nb) ";" int(bg_/nb) ";" int(bb/nb) : fa
+            line = line "\033[38;2;" fa "m\033[48;2;" fb "m" sextant(bits) } }
+        print line "\033[0m" } }
+
     # the mood, painted over any effect except lava: tint keeps the brightness, swaps the hue
     function tint(r, g, b, amt,   l) {
       l = (0.3 * R + 0.59 * G + 0.11 * B) / 255
@@ -431,6 +493,7 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
       else sp = (mood == "fire") ? 2.2 : (mood == "working") ? 1.6 : (mood == "idle") ? 0.25 : 1
       amp = (mood == "fire" || mood == "working") ? 1 : (mood == "idle") ? 0.25 : 0.55
       T = t * sp; L_e = -1
+      if (fx == "ultra") { T = t * (mood == "fire" ? 2 : mood == "working" ? 1.4 : mood == "idle" ? 0.3 : 1); ultra(); exit }
       split("6 0,5 0,4 1,4 2,5 3,6 3", m, ",")                # lava moon: a "(" crescent, top right
       for (i in m) moon[m[i]] = 1
       for (row = 0; row < 3; row++) {
@@ -479,7 +542,7 @@ render_xhanai() {
   local GR SP br dirty gs w e L art up ahead behind
   GR=$(fg 120 120 145); SP="   "
   art=${ART_FX:-${STATUSLINE_ART:-$(cat "$HOME/.claude/statusline-art" 2>/dev/null)}}
-  case $art in rain|acid|tunnel|aurora|ember|warp|pulse|helix|ripple|ecg|hourglass|life|snake) ;; *) art=lava ;; esac
+  case $art in rain|acid|tunnel|aurora|ember|warp|pulse|helix|ripple|ecg|hourglass|life|snake|ultra) ;; *) art=lava ;; esac
 
   # git first: the lava flashes green when the tree goes from dirty to clean
   if [ -n "$cwd" ] && gs=$(timeout 0.3 git -C "$cwd" --no-optional-locks status --porcelain=v2 --branch 2>/dev/null); then
@@ -563,6 +626,6 @@ render_xhanai() {
 case $profile in
   max) render_max ;;
   xhanAI|xhanai) render_xhanai ;;
-  acid|tunnel|aurora|ember|warp|pulse|helix|ripple|ecg|hourglass|life|snake) ART_FX=$profile render_xhanai ;;   # xhanAI layout, other art
+  acid|tunnel|aurora|ember|warp|pulse|helix|ripple|ecg|hourglass|life|snake|ultra) ART_FX=$profile render_xhanai ;;   # xhanAI layout, other art
   *) render_default ;;
 esac
