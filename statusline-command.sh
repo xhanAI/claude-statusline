@@ -269,7 +269,7 @@ rain2() {
 #   life    Conway's game of life, a new world every 30 s
 #   snake   a snake touring the canvas; it grows as the context fills up
 #   planet  3x the pixels (sextant glyphs, 16x9): a lit, turning lava planet in a see-through sky
-#   ultra   strokes only, braille 16x12: a wireframe armillary sphere with an orbiting moon, see-through
+#   ultra   strokes only, braille 16x12: a small wireframe globe with satellites orbiting it, see-through
 canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
   mapfile -t ART < <(LC_ALL=C awk -v fx="$1" -v t="$2" -v mood="$3" -v five="${five%.*}" -v ctx="${used%.*}" '
     function clamp(x){ return x < 0 ? 0 : (x > 255 ? 255 : int(x)) }
@@ -478,11 +478,11 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
             line = line "\033[38;2;" fa "m\033[48;2;" fb "m" sextant(bits) } }
         print line "\033[0m" } }
 
-    # ultra: strokes only. a wireframe armillary sphere drawn in braille (2x4 square dots per cell,
-    # 16x12 in all): meridians and parallels turning, a tilted orbit ring with a moon riding it.
+    # ultra: strokes only. a wireframe globe drawn in braille (2x4 square dots per cell, 16x12 in all):
+    # outline, two turning meridians and the equator, with three satellites on their own orbits.
     # empty dots are see-through; the far side is dimmer; the colours are the lava mood palette.
     function plot(x, y, z, lvl,   sx, sy, k) {                 # a 3D point on the unit scene -> a dot
-      sx = int(7.5 + x * 4.9 + 0.5); sy = int(5.5 - y * 4.9 + 0.5)
+      sx = int(7.5 + x * 3.4 + 0.5); sy = int(5.5 - y * 3.4 + 0.5)
       if (sx < 0 || sx > 15 || sy < 0 || sy > 11) return
       k = sx + sy * 16; if (lvl > D[k]) D[k] = lvl }
     function turn(x, y, z, lvl, ring,   a, c, s, x1, z1, y1, z2) {
@@ -497,8 +497,7 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
       for (lo = 0; lo < 2; lo++) for (u = 0; u < 6.2832; u += 0.05)                    # two meridians, turning
         turn(cos(u) * sin(lo * 1.5708), sin(u), cos(u) * cos(lo * 1.5708), 0.85, 0)
       for (u = 0; u < 6.2832; u += 0.05) turn(cos(u), 0, sin(u), 1, 0)                  # the equator
-      for (u = 0; u < 6.2832; u += 0.03) turnring(1.45 * cos(u), 1.45 * sin(u))       # the orbit ring, own tilt
-      u = T * 0.9; MOON = 1; turnring(1.45 * cos(u), 1.45 * sin(u)); MOON = 0
+      sat(1.55, 0.5, 0, 1.3); sat(1.9, -0.9, 2.1, 0.8); sat(1.35, 1.35, 4.2, 1.7)     # satellites
       lavapal(0.92); split(R " " G " " B, HI, " "); lavapal(0.55); split(R " " G " " B, LO, " ")
       for (cy = 0; cy < 3; cy++) {
         line = ""
@@ -513,10 +512,14 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
                  clamp(mix(LO[2], HI[2], m) + (best > 1) * 80) ";" clamp(mix(LO[3], HI[3], m) + (best > 1) * 80) "m" \
                  sprintf("%c%c%c", 226, 160 + int(b / 64), 128 + b % 64) }
         print line "\033[0m" } }
-    function turnring(x, z,   c, s, y) {                        # ring lies in a plane tilted 0.5 rad off the equator
-      c = cos(0.5); s = sin(0.5); y = -x * s; x = x * c
-      if (MOON) { turn(x, y, z, 1.6, 1); turn(x + 0.12, y, z, 1.6, 1); turn(x, y + 0.12, z, 1.6, 1); return }
-      turn(x, y, z, 0.75, 1) }
+    # a satellite: radius, orbit inclination, phase, speed. a bright head and a fading trail, no orbit line.
+    # the trail shows which way it moves even at one frame a second; behind the globe it is hidden.
+    function sat(r, inc, ph, sp,   j, u, x, y, z, c, s) {
+      c = cos(inc); s = sin(inc)
+      for (j = 3; j >= 0; j--) {
+        u = (T * sp + ph) - j * 0.16 - T * 0.45                 # cancel the globe spin: orbits do not turn with it
+        x = r * cos(u); z = r * sin(u); y = -x * s; x = x * c
+        turn(x, y, z, j == 0 ? 1.6 : 0.75 - j * 0.15, 1) } }
 
     # the mood, painted over any effect except lava: tint keeps the brightness, swaps the hue
     function tint(r, g, b, amt,   l) {

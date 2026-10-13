@@ -142,7 +142,7 @@ The live bar redraws once a second; the GIFs are smoother (12 fps). Regenerate t
 | hourglass | the sand that has run through = how much of the 5h limit is used |
 | life | Conway's game of life, a new world every 30 s |
 | snake | a snake touring the canvas, longer as the context fills up |
-| ultra | strokes only: a wireframe armillary sphere with an orbiting moon, see-through (braille, 16x12 dots) |
+| ultra | strokes only: a small wireframe globe with three satellites orbiting it, see-through (braille, 16x12 dots) |
 | planet | a lit, turning lava planet with an atmosphere, in a see-through sky (sextants, see below) |
 | rain | the 3-row matrix rain |
 
