@@ -1,19 +1,23 @@
 #!/usr/bin/env bash
-# lava-demo: watch the xhanAI lava cycle through every mood at 15 fps. Ctrl+C to stop.
+# lava-demo [effect|all]: watch the xhanAI art cycle through every mood at 15 fps. Ctrl+C to stop.
+#   effects: lava (default) acid tunnel aurora ember warp pulse; "all" walks through every one
 script="$HOME/.claude/statusline-command.sh"
 input='{"cwd":"'"$PWD"'","model":{"display_name":"Opus 5.5"},"effort":{"level":"medium"},"version":"demo",
         "cost":{"total_duration_ms":1800000,"total_api_duration_ms":600000},
         "rate_limits":{"five_hour":{"used_percentage":42}},"context_window":{"used_percentage":12}}'
+fxs=("${1:-lava}"); [ "$1" = all ] && fxs=(lava acid tunnel aurora ember warp pulse)
 moods=(calm working fire idle warn alarm clean)
 trap 'printf "\033[?25h\n"; exit' INT
 printf '\033[?25l\033[2J'
 while :; do
-  for m in "${moods[@]}"; do
-    for ((f = 0; f < 60; f++)); do
-      t=$(awk -v s="$(date +%s.%N)" 'BEGIN{printf "%.3f", s}')
-      printf '\033[H  mood: \033[1m%-8s\033[0m\n\n' "$m"
-      echo "$input" | LAVA_MOOD=$m LAVA_T=$t STATUSLINE_PROFILE=xhanAI bash "$script"
-      sleep 0.066
+  for fx in "${fxs[@]}"; do
+    for m in "${moods[@]}"; do
+      for ((f = 0; f < 45; f++)); do
+        t=$(awk -v s="$(date +%s.%N)" 'BEGIN{printf "%.3f", s}')
+        printf '\033[H  \033[1m%-7s\033[0m mood: \033[1m%-8s\033[0m\n\n' "$fx" "$m"
+        echo "$input" | ART_FX=$fx LAVA_MOOD=$m LAVA_T=$t STATUSLINE_PROFILE=xhanAI bash "$script"
+        sleep 0.066
+      done
     done
   done
 done

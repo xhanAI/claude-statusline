@@ -28,6 +28,7 @@ This copies the script to `~/.claude/`, sets `statusLine` in `~/.claude/settings
 echo default > ~/.claude/statusline-profile   # the 2-line bar above
 echo max     > ~/.claude/statusline-profile   # everything, 4 lines
 echo xhanAI  > ~/.claude/statusline-profile   # minimal, 3 lines, lava lamp
+echo acid    > ~/.claude/statusline-profile   # xhanAI layout with another effect (see "Effects")
 ```
 
 The **max** profile:
@@ -65,27 +66,49 @@ Each `▀` has its own top (foreground) and bottom (background) colour, so the 8
 | mood | looks like | when |
 |---|---|---|
 | calm | slow orange lava | default |
-| working | hot, fast, yellow-white | the transcript was written in the last 4 s (Claude is busy) |
-| fire | white-hot, fastest | working and burning more than $15/h |
+| working | electric cyan, fast | the transcript was written in the last 4 s (Claude is busy) |
+| fire | magenta to white, fastest | working and burning more than $15/h |
 | idle | deep blue with a crescent moon, very slow | prompt cache went cold (you've been away) |
-| warn | crimson | 5h limit or context at 70%+ |
+| warn | hazard yellow | 5h limit or context at 70%+ |
 | alarm | red, pulsing | 5h limit or context at 90%+ |
 | clean | green flash for 6 s | the git tree just went from dirty to clean (you committed) |
 
 Run `lava-demo` to watch every mood at 15 fps. `echo rain > ~/.claude/statusline-art` brings back the matrix rain.
 Cost: ~30 ms per refresh (one `jq`, one `awk` for the lava).
 
+### Effects
+
+The same canvas can draw other things, borrowed from the badtrippin experiments. Each is a profile name
+(`echo tunnel > ~/.claude/statusline-profile`), or `echo tunnel > ~/.claude/statusline-art` under xhanAI:
+
+| effect | what it is |
+|---|---|
+| lava | the lava lamp above (default) |
+| acid | rainbow plasma: six sine waves run through HSV, like badtrippin's `me.py` |
+| tunnel | a spiral tunnel rushing at you |
+| aurora | northern lights curtains over a twinkling sky |
+| ember | doom-style fire licking up from the bottom |
+| warp | stars flying past |
+| pulse | an equalizer; bars jump higher the harder Claude works |
+| rain | the 3-row matrix rain |
+
+The effects keep their own colours and wear the mood on top: busy makes them faster and brighter,
+idle dims and slows them, warn tints amber, alarm pulses red, clean flashes green.
+`lava-demo tunnel` shows one effect through every mood; `lava-demo all` cycles through all of them.
+
 ## Project cost over time
 
-Every refresh, the status line records the session's cost in `~/.claude/cost-ledger/<session-id>`
-(one tiny line: project dir, banked, last), and only when the cost changed. If a resumed session
-restarts its counter, the earlier amount is banked so nothing is lost. A project is the directory
-Claude Code was started in.
+The status line keeps a tiny file per session in `~/.claude/cost-ledger/<session-id>`, written only
+when the cost changes. A project is the **git repo you are in** (or the directory, outside a repo), and
+every increase in the session cost is charged to wherever the session is when it happens. So one
+session started in `~` that works in three repos charges each repo its own share. If a resumed session
+restarts its counter, it counts on from zero and nothing is lost.
 
 - The xhanAI profile shows the project's all-time total next to the session cost: `$0.97 4.75/h Σ $23.10`.
 - `claude-cost` lists every project, most expensive first; `claude-cost <dir>` lists that project's sessions.
 
-Only sessions run with this status line are counted; earlier ones aren't in the ledger.
+Only sessions run with this status line are counted; earlier ones aren't in the ledger. Before
+2026-10-13 everything was charged to the directory Claude Code was started in, so those totals sit there.
 
 ## Rain style
 

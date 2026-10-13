@@ -1,26 +1,29 @@
 #!/usr/bin/env bash
 # claude-cost: all-time Claude Code cost per project, from the status line's ledger.
+# a project is a git repo (or a plain dir); money is charged to wherever the session was when it was spent.
 #   claude-cost          every project, most expensive first
-#   claude-cost <dir>    one project (default: current directory with "."), with its sessions
+#   claude-cost <dir>    one project (e.g. "."), with its sessions
 LEDGER="$HOME/.claude/cost-ledger"
 [ -d "$LEDGER" ] || { echo "No ledger yet; it fills as you use Claude Code with the status line."; exit 0; }
 
-if [ -n "$1" ]; then
-  dir=$(cd "$1" 2>/dev/null && pwd || echo "$1")
+# every ledger line as: project <TAB> dollars <TAB> last-active epoch <TAB> session
+entries() {
   for f in "$LEDGER"/*; do
-    IFS=$'\t' read -r p b l < "$f"
-    [ "$p" = "$dir" ] && printf '%s\t%s\t%s\n' "$(date -d @"$(stat -c %Y "$f")" '+%Y-%m-%d %H:%M')" "$(awk -v b="$b" -v l="$l" 'BEGIN{printf "%.2f", b+l}')" "${f##*/}"
-  done | sort | awk -F'\t' -v d="$dir" '
+    awk -F'\t' -v t="$(stat -c %Y "$f")" -v s="${f##*/}" \
+      '$1 != "@last" && NF >= 2 {printf "%s\t%.6f\t%s\t%s\n", $1, $2 + $3, t, s}' "$f"
+  done; }
+
+if [ -n "$1" ]; then
+  dir=$(cd "$1" 2>/dev/null && { git rev-parse --show-toplevel 2>/dev/null || pwd; } || echo "$1")
+  entries | awk -F'\t' -v d="$dir" '$1==d' | sort -t$'\t' -k3,3n | awk -F'\t' -v d="${dir/#$HOME/\~}" '
     BEGIN{printf "%s\n\n  %-16s  %9s  %s\n", d, "last active", "cost", "session"}
-    {printf "  %-16s  %9s  %s\n", $1, "$"$2, substr($3,1,8); s+=$2; n++}
+    {cmd = "date -d @" $3 " \"+%Y-%m-%d %H:%M\""; cmd | getline when; close(cmd)
+     printf "  %-16s  %9s  %s\n", when, sprintf("$%.2f", $2), substr($4,1,8); s+=$2; n++}
     END{printf "\n  %d sessions, total $%.2f\n", n, s}'
   exit
 fi
 
-rows=$(for f in "$LEDGER"/*; do
-  IFS=$'\t' read -r p b l < "$f"
-  printf '%s\t%s\t%s\n' "$p" "$(awk -v b="$b" -v l="$l" 'BEGIN{print b+l}')" "$(stat -c %Y "$f")"
-done | awk -F'\t' '{s[$1]+=$2; n[$1]++; if ($3>t[$1]) t[$1]=$3}
+rows=$(entries | awk -F'\t' '{s[$1]+=$2; n[$1]++; if ($3>t[$1]) t[$1]=$3}
   END{for (p in s) printf "%.2f\t%d\t%s\t%s\n", s[p], n[p], t[p], p}' | sort -t$'\t' -k1,1 -rn)
 
 printf '  %10s  %8s  %-10s  %s\n' total sessions "last" project

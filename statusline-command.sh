@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Claude Code status line.
 #   profile: ~/.claude/statusline-profile  -> "default" (2 lines), "max" (everything, 4 lines) or "xhanAI" (minimal, 3 lines)
+#            or "acid" / "tunnel" / "aurora" / "ember" / "warp" / "pulse": the xhanAI layout with that art
 #   rain:    ~/.claude/statusline-rain     -> "dots" (default) or "letters"
-#   art:     ~/.claude/statusline-art      -> xhanAI only: "lava" (default) or "rain"
+#   art:     ~/.claude/statusline-art      -> xhanAI only: "lava" (default), "rain", or any effect above
 input=$(cat)
 # every field in one jq call (one fork instead of ~20)
 eval "$(jq -r '@sh "
@@ -21,21 +22,33 @@ profile=${STATUSLINE_PROFILE:-$(cat "$HOME/.claude/statusline-profile" 2>/dev/nu
 now=$(date +%s)
 
 # cost ledger: one tiny file per session in ~/.claude/cost-ledger, holding
-#   project_dir <TAB> banked <TAB> last
-# written only when the session cost changes. if the cost ever drops (a resumed session
-# that restarted its counter), the old amount is banked so nothing is lost.
-# project total = sum over every session file of that project. `claude-cost` prints a report.
+#   @last <TAB> session cost at the previous write
+#   project <TAB> dollars          (one line per project the session spent money in)
+# a project is the git repo the status line is looking at (or the dir when it is not a repo),
+# so a session started in ~ that wanders into three repos charges each repo its own share:
+# every increase in the session cost goes to wherever you are when it happens. if the cost
+# ever drops (a resumed session restarted its counter), the new amount counts from zero.
+# written only when the cost changes. `claude-cost` prints a report.
+# (older files are "project <TAB> banked <TAB> last"; they are read as project = banked+last.)
 LEDGER="$HOME/.claude/cost-ledger"
-proj=${proj:-$cwd}
-if [ -n "$sid" ] && [ -n "$cost" ] && [ -n "$proj" ]; then
-  lf="$LEDGER/$sid"; banked=0; last=0
-  [ -f "$lf" ] && IFS=$'\t' read -r _ banked last < "$lf"
+pkey=""
+[ -n "$cwd" ] && { pkey=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null); pkey=${pkey:-$cwd}; }
+if [ -n "$sid" ] && [ -n "$cost" ] && [ -n "$pkey" ]; then
+  lf="$LEDGER/$sid"; last=0
+  if [ -f "$lf" ]; then
+    IFS=$'\t' read -r a b c < "$lf"
+    if [ "$a" = @last ]; then last=$b; else last=${c:-0}; fi
+  fi
   if [ "$cost" != "$last" ]; then
-    banked=$(awk -v b="$banked" -v l="$last" -v c="$cost" 'BEGIN{print (c+0 < l+0) ? b+l : b}')
-    mkdir -p "$LEDGER"; printf '%s\t%s\t%s\n' "$proj" "$banked" "$cost" > "$lf.tmp" && mv "$lf.tmp" "$lf"
+    mkdir -p "$LEDGER"
+    { [ -f "$lf" ] && cat "$lf"; } | awk -F'\t' -v k="$pkey" -v c="$cost" -v l="$last" '
+      $1 == "@last" { next }
+      NF >= 2 { s[$1] += $2 + $3 }
+      END { s[k] += (c + 0 < l + 0) ? c : c - l
+            printf "@last\t%s\n", c; for (p in s) printf "%s\t%.6f\n", p, s[p] }' > "$lf.tmp" && mv "$lf.tmp" "$lf"
   fi
 fi
-project_total() { [ -d "$LEDGER" ] && cat "$LEDGER"/* 2>/dev/null | awk -F'\t' -v p="$proj" '$1==p{s+=$2+$3} END{printf "%.2f", s}'; }
+project_total() { [ -d "$LEDGER" ] && cat "$LEDGER"/* 2>/dev/null | awk -F'\t' -v p="$pkey" '$1==p{s+=$2+$3} END{printf "%.2f", s}'; }
 
 R=$'\033[0m'; DIM=$'\033[2m'; B=$'\033[1m'
 fg() { printf '\033[38;2;%s;%s;%sm' "$1" "$2" "$3"; }
@@ -227,48 +240,130 @@ rain2() {
   done
   printf '%s%s' "$out" "$R"; }
 
-# lava lamp, 8 cells wide and 3 rows tall. each cell is a half block "▀" with its own
-# foreground (top pixel) and background (bottom pixel), so it is an 8x6 true-colour canvas.
-# the plasma is a few overlapping sine waves; the mood picks the palette and the speed.
-#   calm   orange lava, slow            working  hot yellow-white lava, fast (Claude is busy)
-#   idle   deep blue with a moon        warn     dark red-orange (5h or ctx >= 70%)
-#   alarm  red, pulsing (>= 90%)        clean    green flash right after the tree goes clean
-#   fire   white-hot, fastest (burning more than $15/h while working)
-lava() { # lava <time> <mood>  -> fills LAVA[0..2]
-  mapfile -t LAVA < <(awk -v t="$1" -v mood="$2" '
+# the art canvas: 8 cells wide and 3 rows tall. each cell is a half block "▀" with its own
+# foreground (top pixel) and background (bottom pixel), so it is an 8x6 true-colour image,
+# redrawn from the clock on every refresh (no state). every effect reacts to the same moods.
+#
+# lava has its own palette per mood, each in a different colour family:
+#   calm     orange lava, slow                 working  electric cyan, fast (Claude is busy)
+#   fire     magenta-white, fastest (> $15/h)  idle     deep blue with a moon (cache went cold)
+#   warn     hazard yellow (5h or ctx >= 70%)  alarm    red, pulsing (>= 90%)
+#   clean    green flash right after the git tree goes clean
+# the other effects keep their own colours and the mood changes their speed and tint
+# (busy: faster and brighter, idle: dim and slow, warn: amber, alarm: pulsing red, clean: green).
+#   acid    rainbow plasma, six sine waves through HSV (badtrippin's me.py)
+#   tunnel  a twisting checkerboard tunnel you fly into
+#   aurora  northern lights curtains over a starry sky
+#   ember   doom-style fire licking up from the bottom
+#   warp    stars rushing past
+#   pulse   an equalizer, bars jump higher the harder Claude works
+canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
+  mapfile -t ART < <(awk -v fx="$1" -v t="$2" -v mood="$3" '
     function clamp(x){ return x < 0 ? 0 : (x > 255 ? 255 : int(x)) }
     function mix(a, b, f){ return a + (b - a) * f }
+    function frac(x){ return x - int(x) + (x < 0 ? 1 : 0) }
+    function rgb(r, g, b){ R = r; G = g; B = b }
     # three-stop gradient lo -> mid -> hi, v in 0..1
     function grad3(v, r0,g0,b0, r1,g1,b1, r2,g2,b2,   f) {
-      if (v < 0.5) { f = v * 2; return clamp(mix(r0,r1,f)) ";" clamp(mix(g0,g1,f)) ";" clamp(mix(b0,b1,f)) }
-      f = (v - 0.5) * 2;      return clamp(mix(r1,r2,f)) ";" clamp(mix(g1,g2,f)) ";" clamp(mix(b1,b2,f)) }
-    function colour(v, x, y,   d1, d2, k) {
-      if (mood == "idle") {
-        if ((x " " y) in moon) return "235;225;170"             # crescent moon
-        return grad3(v, 6,6,24, 30,25,90, 90,70,190) }
-      if (mood == "clean")   return grad3(v, 0,25,10, 30,170,80, 190,255,200)
-      if (mood == "warn")    return grad3(v, 35,0,15, 175,15,50, 255,95,80)
-      if (mood == "alarm") { k = (int(t) % 2) ? 1 : 0.45
-                             return grad3(v, 40*k,0,0, 200*k,10,10, 255*k,70*k,60*k) }
-      if (mood == "working") return grad3(v, 70,5,0, 245,95,0, 255,235,140)
-      if (mood == "fire")    return grad3(v, 120,10,0, 255,150,20, 255,255,240)
-      return grad3(v, 25,0,0, 200,40,0, 255,170,40) }               # calm
+      if (v < 0.5) { f = v * 2; rgb(mix(r0,r1,f), mix(g0,g1,f), mix(b0,b1,f)); return }
+      f = (v - 0.5) * 2;      rgb(mix(r1,r2,f), mix(g1,g2,f), mix(b1,b2,f)) }
+    function hsv(h, s, v,   i, f, p, q, u) {
+      h = frac(h); i = int(h * 6); f = h * 6 - i
+      p = v * (1 - s); q = v * (1 - f * s); u = v * (1 - (1 - f) * s); v *= 255; p *= 255; q *= 255; u *= 255
+      if (i == 0) rgb(v,u,p); else if (i == 1) rgb(q,v,p); else if (i == 2) rgb(p,v,u)
+      else if (i == 3) rgb(p,q,v); else if (i == 4) rgb(u,p,v); else rgb(v,p,q) }
+    function hash(n){ return frac(sin(n * 12.9898) * 43758.5453) }
+
+    function lava(x, y,   v, k) {
+      v = sin(x * 0.55 + T) + sin(y * 0.75 - T * 1.3) + sin((x + y) * 0.45 + T * 0.7) \
+        + sin(sqrt((x - 3.5 - 2 * sin(T * 0.5))^2 + (y - 2.5 - 1.5 * cos(T * 0.4))^2) * 1.1 - T)
+      v = 0.5 + v / 5; v = v < 0 ? 0 : (v > 1 ? 1 : v)
+      if (mood == "working" || mood == "fire") v = v ^ 0.8
+      if (mood == "idle") { if ((x " " y) in moon) { rgb(235,225,170); return }
+                            grad3(v, 6,6,24, 30,25,90, 90,70,190); return }
+      if (mood == "working") { grad3(v, 0,12,40, 0,140,255, 190,255,255); return }
+      if (mood == "fire")    { grad3(v, 45,0,45, 255,0,170, 255,225,255); return }
+      if (mood == "warn")    { grad3(v, 30,18,0, 235,175,0, 255,255,160); return }
+      if (mood == "alarm")   { k = (int(t) % 2) ? 1 : 0.45
+                               grad3(v, 40*k,0,0, 210*k,10,10, 255*k,70*k,60*k); return }
+      if (mood == "clean")   { grad3(v, 0,25,10, 30,170,80, 190,255,200); return }
+      grad3(v, 25,0,0, 200,40,0, 255,170,40) }                      # calm
+
+    function acid(x, y,   nx, ny, v) {
+      nx = x / 14; ny = y / 14
+      v = sin(nx * 12 + T) + sin(ny * 12 + T * 1.1) + sin((nx + ny) * 8 + T * 0.9) \
+        + sin(sqrt(nx*nx + ny*ny) * 14 + T * 0.7) + sin(sqrt((nx-.5)^2 + (ny-.5)^2) * 18 - T * 1.3) \
+        + sin(sqrt((nx-.8)^2 + (ny-.3)^2) * 16 + T * 0.8)
+      hsv(v * 0.07 + T * 0.04, 0.95, 1) }
+
+    function tunnel(x, y,   dx, dy, r, a, u, w, s) {
+      dx = x - 3.5; dy = y - 2.5; r = sqrt(dx*dx + dy*dy) + 0.01; a = atan2(dy, dx) / 6.2832
+      u = 3 / r + T * 1.4                                     # depth: rings rush outwards
+      s = 0.3 + 0.7 * (0.5 + 0.5 * sin(u * 2.2 + a * 6.2832))  # a spiral, not plain rings
+      hsv(a + 0.5 / r + T * 0.08, 0.85, s * (r < 0.8 ? 0.35 : 1)) }
+
+    function aurora(x, y,   yb, d, i, f) {
+      yb = 3.4 + 1.3 * sin(x * 0.7 + T * 0.8) + 0.6 * sin(x * 1.9 - T * 1.3)
+      d = yb - y
+      if (d >= 0) {
+        i = 1.3 * exp(-d * 0.45) * (0.7 + 0.3 * sin(x * 1.3 + T * 2.2)); f = d / 4; f = f > 1 ? 1 : f
+        rgb(4 + mix(40, 170, f) * i, 6 + mix(255, 70, f) * i, 22 + mix(150, 255, f) * i); return }
+      rgb(4, 6, 22)
+      if (hash(x * 7 + y * 13) > 0.86) { i = 0.5 + 0.5 * sin(T * 3 + x * y); rgb(4 + 200*i, 6 + 200*i, 22 + 180*i) } }
+
+    function ember(x, y,   n, h) {
+      n = 0.5 * sin(x * 1.3 + sin(y * 0.9 + T * 2.1) * 1.6) + 0.35 * sin(x * 2.7 - y * 1.7 + T * 3.3) \
+        + 0.15 * sin(x * 4.1 + y * 2.3 - T * 4.7)
+      h = (y + 1) / 6 * 1.15 - 0.35 + 0.4 * n; h = h < 0 ? 0 : (h > 1 ? 1 : h)
+      if (h < 0.35) rgb(mix(0, 140, h / .35), 0, 0)
+      else if (h < 0.7) rgb(mix(140, 255, (h - .35) / .35), mix(0, 140, (h - .35) / .35), 0)
+      else rgb(255, mix(140, 255, (h - .7) / .3), mix(0, 220, (h - .7) / .3)) }
+
+    function warp(x, y,   i, a, z, r, px, py, d, b, best) {
+      best = 0
+      for (i = 0; i < 20; i++) {
+        a = i * 2.39996; z = frac(hash(i) - T * 0.22); r = 0.35 / (z + 0.04)
+        px = 3.5 + cos(a) * r * 1.4; py = 2.5 + sin(a) * r
+        d = sqrt((x - px)^2 + (y - py)^2); b = (1.15 - z) * (d < 0.55 ? 1 : (d < 1.1 ? 0.2 : 0))
+        if (b > best) best = b }
+      rgb(3 + 230 * best, 3 + 235 * best, 12 + 243 * best) }
+
+    function pulse(x, y,   h, lit, f) {
+      h = 6 * amp * (0.55 + 0.45 * sin(x * 2.1 + T * 3.1) * sin(x * 0.7 + T * 1.7 + 1)) \
+        + 1.2 * amp * hash(x + int(T * 6) * 8)
+      lit = (5 - y) < h; f = (5 - y) / 5
+      if (!lit) { rgb(14, 14, 24); return }
+      if (f < 0.5) rgb(mix(40, 250, f * 2), 220, 90); else rgb(250, mix(220, 70, (f - .5) * 2), mix(90, 70, (f - .5) * 2)) }
+
+    # the mood, painted over any effect except lava: tint keeps the brightness, swaps the hue
+    function tint(r, g, b, amt,   l) {
+      l = (0.3 * R + 0.59 * G + 0.11 * B) / 255
+      R = mix(R, l * r, amt); G = mix(G, l * g, amt); B = mix(B, l * b, amt) }
+    function moodfx() {
+      if (mood == "idle")  { R = R * .3; G = G * .3; B = B * .3 + 18 }
+      else if (mood == "warn")  tint(255, 190, 0, .6)
+      else if (mood == "alarm") { tint(255, 25, 25, .85); if (int(t) % 2 == 0) { R *= .5; G *= .5; B *= .5 } }
+      else if (mood == "clean") tint(60, 255, 130, .75)
+      else if (mood == "fire")  { R = mix(R, 255, .25); G = mix(G, 255, .25); B = mix(B, 255, .25) } }
+
     BEGIN {
-      sp = (mood == "fire") ? 1.6 : (mood == "working") ? 1.1 : (mood == "idle") ? 0.15 : (mood == "alarm") ? 0.8 : 0.35
+      if (fx == "lava") sp = (mood == "fire") ? 1.6 : (mood == "working") ? 1.1 : (mood == "idle") ? 0.15 : (mood == "alarm") ? 0.8 : 0.35
+      else sp = (mood == "fire") ? 2.2 : (mood == "working") ? 1.6 : (mood == "idle") ? 0.25 : 1
+      amp = (mood == "fire" || mood == "working") ? 1 : (mood == "idle") ? 0.25 : 0.55
       T = t * sp
-      split("6 0,5 0,4 1,4 2,5 3,6 3", m, ",")                # pixels of a "(" crescent, top right
+      split("6 0,5 0,4 1,4 2,5 3,6 3", m, ",")                # lava moon: a "(" crescent, top right
       for (i in m) moon[m[i]] = 1
       for (row = 0; row < 3; row++) {
         line = ""
         for (x = 0; x < 8; x++) {
           for (k = 0; k < 2; k++) {
             y = row * 2 + k
-            v = sin(x * 0.55 + T) + sin(y * 0.75 - T * 1.3) + sin((x + y) * 0.45 + T * 0.7) \
-              + sin(sqrt((x - 3.5 - 2 * sin(T * 0.5))^2 + (y - 2.5 - 1.5 * cos(T * 0.4))^2) * 1.1 - T)
-            v = 0.5 + v / 5                                        # -4..4 -> roughly 0..1, extra contrast
-            v = v < 0 ? 0 : (v > 1 ? 1 : v)
-            if (mood == "working" || mood == "fire") v = v ^ 0.8   # more of the hot end
-            c[k] = colour(v, x, y)
+            if (fx == "acid") acid(x, y); else if (fx == "tunnel") tunnel(x, y)
+            else if (fx == "aurora") aurora(x, y); else if (fx == "ember") ember(x, y)
+            else if (fx == "warp") warp(x, y); else if (fx == "pulse") pulse(x, y)
+            else lava(x, y)
+            if (fx != "lava") moodfx()
+            c[k] = clamp(R) ";" clamp(G) ";" clamp(B)
           }
           line = line "\033[38;2;" c[0] "m\033[48;2;" c[1] "m▀"
         }
@@ -297,7 +392,8 @@ lava_mood() {
 render_xhanai() {
   local GR SP br dirty gs w e L art
   GR=$(fg 120 120 145); SP="   "
-  art=$(cat "$HOME/.claude/statusline-art" 2>/dev/null)
+  art=${ART_FX:-${STATUSLINE_ART:-$(cat "$HOME/.claude/statusline-art" 2>/dev/null)}}
+  case $art in rain|acid|tunnel|aurora|ember|warp|pulse) ;; *) art=lava ;; esac
 
   # git first: the lava flashes green when the tree goes from dirty to clean
   if [ -n "$cwd" ] && gs=$(timeout 0.3 git -C "$cwd" --no-optional-locks status --porcelain=v2 --branch 2>/dev/null); then
@@ -314,7 +410,7 @@ render_xhanai() {
   if [ "$art" = rain ]; then
     P0="$(rain2 0)"; P1="$(rain2 1)"; P2="$(rain2 2)"
   else
-    lava "${LAVA_T:-$now}" "$(lava_mood)"; P0=${LAVA[0]}; P1=${LAVA[1]}; P2=${LAVA[2]}
+    canvas "$art" "${LAVA_T:-$now}" "$(lava_mood)"; P0=${ART[0]}; P1=${ART[1]}; P2=${ART[2]}
   fi
 
   # line 1, where: dir + branch alone, so their changing length never shifts anything else
@@ -365,5 +461,6 @@ render_xhanai() {
 case $profile in
   max) render_max ;;
   xhanAI|xhanai) render_xhanai ;;
+  acid|tunnel|aurora|ember|warp|pulse) ART_FX=$profile render_xhanai ;;   # xhanAI layout, other art
   *) render_default ;;
 esac
