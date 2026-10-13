@@ -268,7 +268,8 @@ rain2() {
 #   hourglass  the sand that has run through is how much of the 5h limit is used
 #   life    Conway's game of life, a new world every 30 s
 #   snake   a snake touring the canvas; it grows as the context fills up
-#   ultra   the limit: 3x the pixels (sextant glyphs, 16x9), a lit turning lava planet in a see-through sky
+#   planet  3x the pixels (sextant glyphs, 16x9): a lit, turning lava planet in a see-through sky
+#   ultra   strokes only, braille 16x12: a wireframe armillary sphere with an orbiting moon, see-through
 canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
   mapfile -t ART < <(LC_ALL=C awk -v fx="$1" -v t="$2" -v mood="$3" -v five="${five%.*}" -v ctx="${used%.*}" '
     function clamp(x){ return x < 0 ? 0 : (x > 255 ? 255 : int(x)) }
@@ -418,7 +419,7 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
       if (sidx(x, y) == a) { rgb(255, 60, 70); return }
       rgb(8, 12, 10) }
 
-    # ultra: the limit. sextant characters (2x3 solid pixels per cell, drawn natively by VTE terminals)
+    # planet: sextant characters (2x3 solid pixels per cell, drawn natively by VTE terminals)
     # give a 16x9 canvas; every pixel is 4 samples averaged; each cell gets the two colours that fit
     # its six pixels best. the scene: a lit, turning lava planet (mood palette) with an atmosphere,
     # in a see-through sky with a few stars.
@@ -477,6 +478,46 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
             line = line "\033[38;2;" fa "m\033[48;2;" fb "m" sextant(bits) } }
         print line "\033[0m" } }
 
+    # ultra: strokes only. a wireframe armillary sphere drawn in braille (2x4 square dots per cell,
+    # 16x12 in all): meridians and parallels turning, a tilted orbit ring with a moon riding it.
+    # empty dots are see-through; the far side is dimmer; the colours are the lava mood palette.
+    function plot(x, y, z, lvl,   sx, sy, k) {                 # a 3D point on the unit scene -> a dot
+      sx = int(7.5 + x * 4.9 + 0.5); sy = int(5.5 - y * 4.9 + 0.5)
+      if (sx < 0 || sx > 15 || sy < 0 || sy > 11) return
+      k = sx + sy * 16; if (lvl > D[k]) D[k] = lvl }
+    function turn(x, y, z, lvl, ring,   a, c, s, x1, z1, y1, z2) {
+      a = T * 0.45; c = cos(a); s = sin(a); x1 = x * c + z * s; z1 = -x * s + z * c   # spin
+      c = cos(0.42); s = sin(0.42); y1 = y * c - z1 * s; z2 = y * s + z1 * c           # tilt towards us
+      if (ring && z2 < 0 && x1 * x1 + y1 * y1 < 1) return                              # ring hidden by the globe
+      if (!ring && z2 < 0) return                                                      # globe: front side only
+      plot(x1, y1, z2, lvl) }
+    function ultra2(   i, u, la, lo, k, cx, cy, j, b, m, line, best, px, py) {
+      for (i = 0; i < 192; i++) D[i] = 0
+      for (u = 0; u < 6.2832; u += 0.04) plot(cos(u), sin(u), 0, 0.7)                  # the outline
+      for (lo = 0; lo < 2; lo++) for (u = 0; u < 6.2832; u += 0.05)                    # two meridians, turning
+        turn(cos(u) * sin(lo * 1.5708), sin(u), cos(u) * cos(lo * 1.5708), 0.85, 0)
+      for (u = 0; u < 6.2832; u += 0.05) turn(cos(u), 0, sin(u), 1, 0)                  # the equator
+      for (u = 0; u < 6.2832; u += 0.03) turnring(1.45 * cos(u), 1.45 * sin(u))       # the orbit ring, own tilt
+      u = T * 0.9; MOON = 1; turnring(1.45 * cos(u), 1.45 * sin(u)); MOON = 0
+      lavapal(0.92); split(R " " G " " B, HI, " "); lavapal(0.55); split(R " " G " " B, LO, " ")
+      for (cy = 0; cy < 3; cy++) {
+        line = ""
+        for (cx = 0; cx < 8; cx++) {
+          b = 0; best = 0
+          for (j = 0; j < 8; j++) {
+            px = cx * 2 + (j >= 4); py = cy * 4 + j % 4; k = px + py * 16
+            if (D[k] > 0) { b += (j % 4 == 3) ? (j >= 4 ? 128 : 64) : 2^((j % 4) + (j >= 4) * 3); if (D[k] > best) best = D[k] } }
+          if (!b) { line = line "\033[0m "; continue }
+          m = best > 1 ? 1 : best
+          line = line "\033[0m\033[38;2;" clamp(mix(LO[1], HI[1], m) + (best > 1) * 80) ";" \
+                 clamp(mix(LO[2], HI[2], m) + (best > 1) * 80) ";" clamp(mix(LO[3], HI[3], m) + (best > 1) * 80) "m" \
+                 sprintf("%c%c%c", 226, 160 + int(b / 64), 128 + b % 64) }
+        print line "\033[0m" } }
+    function turnring(x, z,   c, s, y) {                        # ring lies in a plane tilted 0.5 rad off the equator
+      c = cos(0.5); s = sin(0.5); y = -x * s; x = x * c
+      if (MOON) { turn(x, y, z, 1.6, 1); turn(x + 0.12, y, z, 1.6, 1); turn(x, y + 0.12, z, 1.6, 1); return }
+      turn(x, y, z, 0.75, 1) }
+
     # the mood, painted over any effect except lava: tint keeps the brightness, swaps the hue
     function tint(r, g, b, amt,   l) {
       l = (0.3 * R + 0.59 * G + 0.11 * B) / 255
@@ -493,7 +534,8 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
       else sp = (mood == "fire") ? 2.2 : (mood == "working") ? 1.6 : (mood == "idle") ? 0.25 : 1
       amp = (mood == "fire" || mood == "working") ? 1 : (mood == "idle") ? 0.25 : 0.55
       T = t * sp; L_e = -1
-      if (fx == "ultra") { T = t * (mood == "fire" ? 2 : mood == "working" ? 1.4 : mood == "idle" ? 0.3 : 1); ultra(); exit }
+      if (fx == "ultra" || fx == "planet") { T = t * (mood == "fire" ? 2 : mood == "working" ? 1.4 : mood == "idle" ? 0.3 : 1)
+                                             if (fx == "ultra") ultra2(); else ultra(); exit }
       split("6 0,5 0,4 1,4 2,5 3,6 3", m, ",")                # lava moon: a "(" crescent, top right
       for (i in m) moon[m[i]] = 1
       for (row = 0; row < 3; row++) {
@@ -542,7 +584,7 @@ render_xhanai() {
   local GR SP br dirty gs w e L art up ahead behind
   GR=$(fg 120 120 145); SP="   "
   art=${ART_FX:-${STATUSLINE_ART:-$(cat "$HOME/.claude/statusline-art" 2>/dev/null)}}
-  case $art in rain|acid|tunnel|aurora|ember|warp|pulse|helix|ripple|ecg|hourglass|life|snake|ultra) ;; *) art=lava ;; esac
+  case $art in rain|acid|tunnel|aurora|ember|warp|pulse|helix|ripple|ecg|hourglass|life|snake|ultra|planet) ;; *) art=lava ;; esac
 
   # git first: the lava flashes green when the tree goes from dirty to clean
   if [ -n "$cwd" ] && gs=$(timeout 0.3 git -C "$cwd" --no-optional-locks status --porcelain=v2 --branch 2>/dev/null); then
@@ -626,6 +668,6 @@ render_xhanai() {
 case $profile in
   max) render_max ;;
   xhanAI|xhanai) render_xhanai ;;
-  acid|tunnel|aurora|ember|warp|pulse|helix|ripple|ecg|hourglass|life|snake|ultra) ART_FX=$profile render_xhanai ;;   # xhanAI layout, other art
+  acid|tunnel|aurora|ember|warp|pulse|helix|ripple|ecg|hourglass|life|snake|ultra|planet) ART_FX=$profile render_xhanai ;;   # xhanAI layout, other art
   *) render_default ;;
 esac
