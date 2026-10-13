@@ -14,6 +14,10 @@ user@host /path/to/dir │ ◆ Sonnet │ ctx 12%
 
 ## Cheat sheet
 
+Run these in any normal terminal, from any folder. Inside Claude Code you can also type them after a `!`
+(e.g. `! echo snake > ~/.claude/statusline-profile`), except `lava-demo`, which loops forever and needs its own terminal.
+Switching the look takes effect within a second, no restart.
+
 ```bash
 # on
 git clone https://github.com/xhanAI/claude-statusline.git ~/repos/active/claude-statusline
@@ -22,6 +26,14 @@ cd ~/repos/active/claude-statusline && ./install.sh     # needs jq; restart Clau
 # pick a look
 echo xhanAI  > ~/.claude/statusline-profile   # lava (or any effect: acid tunnel snake hourglass ...)
 echo default > ~/.claude/statusline-profile   # simplest, 2 lines
+echo max     > ~/.claude/statusline-profile   # everything, 4 lines
+# animations (xhanAI layout): lava acid tunnel aurora ember warp pulse helix ripple ecg hourglass life snake
+echo snake   > ~/.claude/statusline-profile
+
+# preview the animations (own terminal, Ctrl+C to stop)
+lava-demo all          # every animation in every mood
+lava-demo snake        # just one
+claude-cost            # money spent per repo; claude-cost . for this repo's sessions
 
 # update
 cd ~/repos/active/claude-statusline && git pull && ./install.sh
