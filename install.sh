@@ -7,9 +7,12 @@ mkdir -p "$dest"
 command -v jq >/dev/null || { echo "jq is required (sudo apt install jq)"; exit 1; }
 
 cp "$here/statusline-command.sh" "$dest/statusline-command.sh"
-[ -f "$dest/statusline-rain" ] || echo dots > "$dest/statusline-rain"
 
-mkdir -p "$HOME/.local/bin"; cp "$here/claude-cost" "$here/lava-demo" "$HOME/.local/bin/"
+mkdir -p "$HOME/.local/bin"
+rm -f "$HOME/.local/bin/lava-demo"   # the old name of statusline-demo
+for f in claude-cost statusline-demo; do   # skip when ~/.local/bin already links back here
+  [ "$here/$f" -ef "$HOME/.local/bin/$f" ] || cp "$here/$f" "$HOME/.local/bin/"
+done
 
 settings="$dest/settings.json"
 [ -f "$settings" ] || echo '{}' > "$settings"
@@ -18,4 +21,4 @@ jq --arg cmd "bash $dest/statusline-command.sh" \
   '.statusLine = {type: "command", command: $cmd, refreshInterval: 1}' \
   "$settings.bak" > "$settings"
 echo "Installed. Backup of your settings: $settings.bak"
-echo "Rain style: echo letters|dots > $dest/statusline-rain"
+echo "Restart Claude Code. Change the look any time: echo snake > $dest/statusline-profile"

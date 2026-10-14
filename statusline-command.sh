@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Claude Code status line.
-#   profile: ~/.claude/statusline-profile  -> "default" (2 lines), "max" (everything, 4 lines) or "xhanAI" (minimal, 3 lines)
-#            or any art effect below (acid, tunnel, snake, ...): the xhanAI layout with that art
-#   rain:    ~/.claude/statusline-rain     -> "dots" (default) or "letters"
-#   art:     ~/.claude/statusline-art      -> xhanAI only: "lava" (default), "rain", or any effect above
+#   profile: ~/.claude/statusline-profile  -> "xhanAI" (3 lines, the default), "simple" (2 lines), "max" (everything, 4 lines)
+#            or any art effect below (rain, lava, acid, snake, ...): the xhanAI layout with that art
+#   art:     ~/.claude/statusline-art      -> the art the plain "xhanAI" profile shows: "rain" (default), "lava", or any effect
+#   rain:    ~/.claude/statusline-rain     -> "letters" (default) or "dots"
 input=$(cat)
 # every field in one jq call (one fork instead of ~20)
 eval "$(jq -r '@sh "
@@ -19,6 +19,7 @@ csize=\(.context_window.context_window_size // "") ctok=\(.context_window.total_
 hit=\(.prompt_cache.hit_ratio // "") warm=\(.prompt_cache.warm | tostring) cexp=\(.prompt_cache.expires_at // "")
 "' <<< "$input")"
 profile=${STATUSLINE_PROFILE:-$(cat "$HOME/.claude/statusline-profile" 2>/dev/null)}
+profile=${profile:-xhanAI}
 now=$(date +%s)
 
 # cost ledger: one tiny file per session in ~/.claude/cost-ledger, holding
@@ -95,7 +96,7 @@ rain() {
     if [ "$profile" = max ] && [ -n "$five" ] && [ "${five%.*}" -ge 90 ]; then
       col="$(( ${col%% *} + 55 )) 30 30"; [ "$head" -le 1 ] && col="255 70 70"
     fi
-    if [ "$style" = letters ]; then
+    if [ "$style" != dots ]; then
       g=${glyphs[$(( (now * 7 + c * 13 + c * c * 5) % ${#glyphs[@]} ))]}
       [ "$head" -ge 5 ] && g="·"
     else
@@ -236,7 +237,7 @@ rain2() {
     case $best in
       0) col="210 255 220" ;; 1) col="80 240 130" ;; 2) col="40 180 90" ;; 3) col="25 120 60" ;; *) col="25 60 40" ;;
     esac
-    if [ "$style" = letters ]; then
+    if [ "$style" != dots ]; then
       if [ "$bits" -eq 0 ]; then g=" "; else g=${glyphs[$(( (now * 7 + c * 13 + row * 29) % ${#glyphs[@]} ))]}; fi
     else
       g=$(printf "\\U$(printf %08x $((0x2800 + bits)))")
@@ -649,9 +650,9 @@ canvas() { # canvas <effect> <time> <mood>  -> fills ART[0..2]
     }')
 }
 
-# what the lava should feel like right now
-lava_mood() {
-  [ -n "$LAVA_MOOD" ] && { echo "$LAVA_MOOD"; return; }          # forced, for the demo
+# what the art should feel like right now (the mood)
+art_mood() {
+  [ -n "$ART_MOOD" ] && { echo "$ART_MOOD"; return; }          # forced, for the demo
   local f=${five%.*} c=${used%.*}; f=${f:-0}; c=${c:-0}
   if [ "$f" -ge 90 ] || [ "$c" -ge 90 ]; then echo alarm; return; fi
   [ -n "$clean_until" ] && [ "$now" -lt "$clean_until" ] && { echo clean; return; }
@@ -670,7 +671,7 @@ render_xhanai() {
   local GR SP br dirty gs w e L art up ahead behind
   GR=$(fg 120 120 145); SP="   "
   art=${ART_FX:-${STATUSLINE_ART:-$(cat "$HOME/.claude/statusline-art" 2>/dev/null)}}
-  case $art in rain|acid|tunnel|aurora|ember|warp|pulse|helix|ripple|ecg|hourglass|life|snake|orbit|planet|smiley) ;; *) art=lava ;; esac
+  case $art in lava|acid|tunnel|aurora|ember|warp|pulse|helix|ripple|ecg|hourglass|life|snake|orbit|planet|smiley) ;; *) art=rain ;; esac
 
   # git first: the lava flashes green when the tree goes from dirty to clean
   if [ -n "$cwd" ] && gs=$(timeout 0.3 git -C "$cwd" --no-optional-locks status --porcelain=v2 --branch 2>/dev/null); then
@@ -689,7 +690,7 @@ render_xhanai() {
   if [ "$art" = rain ]; then
     P0="$(rain2 0)"; P1="$(rain2 1)"; P2="$(rain2 2)"
   else
-    canvas "$art" "${LAVA_T:-$now}" "$(lava_mood)"; P0=${ART[0]}; P1=${ART[1]}; P2=${ART[2]}
+    canvas "$art" "${ART_T:-$now}" "$(art_mood)"; P0=${ART[0]}; P1=${ART[1]}; P2=${ART[2]}
   fi
 
   # line 1, where: dir + branch alone, so their changing length never shifts anything else
@@ -754,6 +755,6 @@ render_xhanai() {
 case $profile in
   max) render_max ;;
   xhanAI|xhanai) render_xhanai ;;
-  acid|tunnel|aurora|ember|warp|pulse|helix|ripple|ecg|hourglass|life|snake|orbit|planet|smiley) ART_FX=$profile render_xhanai ;;   # xhanAI layout, other art
+  rain|lava|acid|tunnel|aurora|ember|warp|pulse|helix|ripple|ecg|hourglass|life|snake|orbit|planet|smiley) ART_FX=$profile render_xhanai ;;   # xhanAI layout, other art
   *) render_default ;;
 esac

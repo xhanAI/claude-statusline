@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """make-gifs.py: render the README gallery GIFs from the real status line script.
 
-Feeds statusline-command.sh fake input frame by frame (LAVA_T = the clock, LAVA_MOOD = the mood),
+Feeds statusline-command.sh fake input frame by frame (ART_T = the clock, ART_MOOD = the mood),
 parses its ANSI output and draws it with Pillow. Runs with a throwaway HOME so it never touches
 the real cost ledger or caches.  Usage: tools/make-gifs.py   (writes docs/*.gif)
 """
@@ -83,7 +83,7 @@ def draw(rows, cw, ch, font, ncols=None, pad=0):
 
 
 def run(home, profile, fx, mood, t):
-    env = dict(os.environ, HOME=home, STATUSLINE_PROFILE=profile, ART_FX=fx, LAVA_MOOD=mood, LAVA_T=f"{t:.3f}")
+    env = dict(os.environ, HOME=home, STATUSLINE_PROFILE=profile, ART_FX=fx, ART_MOOD=mood, ART_T=f"{t:.3f}")
     inp = INPUT % (os.path.expanduser("~"), int(t) + 7560)
     out = subprocess.run(["bash", SCRIPT], input=inp, capture_output=True, text=True, env=env).stdout
     return out.replace(os.path.expanduser("~"), "~")  # the throwaway HOME hides the real one from the script

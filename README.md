@@ -1,67 +1,109 @@
 # claude-statusline
 
-A colourful, animated status line for Claude Code.
+A colourful, animated status line for Claude Code: a little animation on the left, and next to it
+where you are, which model, what the session has cost and how much of your limits are left.
 
 ![the xhanAI profile](docs/xhanai.gif)
 
-```
-⠰⡄⢈⠛⠰⡄ ⏱ 1h01m │ ✦ claude 2m05s │ 5h 62% ↻ 1h30m
-user@host /path/to/dir │ ◆ Sonnet │ ctx 12%
-```
+## Install
 
-- **Line 1:** matrix-rain animation, session time, Claude API time, 5h rate-limit usage and time until it resets.
-- **Line 2:** user@host, directory, model, context usage.
-- Percentages are green < 50%, yellow < 80%, red above. "claude" is Claude orange.
-- The 5h number only appears when Claude Code reports rate limits (subscription plans).
-
-## Cheat sheet
-
-Run these in any normal terminal, from any folder. Inside Claude Code you can also type them after a `!`
-(e.g. `! echo snake > ~/.claude/statusline-profile`), except `lava-demo`, which loops forever and needs its own terminal.
-Switching the look takes effect within a second, no restart.
+Needs `jq` (`sudo apt install jq`).
 
 ```bash
-# on
 git clone https://github.com/xhanAI/claude-statusline.git ~/repos/active/claude-statusline
-cd ~/repos/active/claude-statusline && ./install.sh     # needs jq; restart Claude Code
+cd ~/repos/active/claude-statusline && ./install.sh
+```
 
-# pick a look
-echo xhanAI  > ~/.claude/statusline-profile   # lava (or any effect: acid tunnel snake hourglass ...)
-echo default > ~/.claude/statusline-profile   # simplest, 2 lines
-echo max     > ~/.claude/statusline-profile   # everything, 4 lines
-# animations (xhanAI layout): lava acid tunnel aurora ember warp pulse helix ripple ecg hourglass life snake orbit planet smiley
-echo snake   > ~/.claude/statusline-profile
+Then restart Claude Code. You get the **xhanAI** layout with the green matrix rain in letters.
 
-# preview the animations (own terminal, Ctrl+C to stop)
-lava-demo all          # every animation in every mood
-lava-demo snake        # just one
-claude-cost            # money spent per repo; claude-cost . for this repo's sessions
+The installer copies the script to `~/.claude/`, points `statusLine` in `~/.claude/settings.json` at it
+(your old settings are saved as `settings.json.bak`), and puts `statusline-demo` and `claude-cost` in `~/.local/bin`.
 
-# update
-cd ~/repos/active/claude-statusline && git pull && ./install.sh
+## Change the animation
 
-# off (back to Claude Code's own bar)
+The whole look is one word in one file, `~/.claude/statusline-profile`. Write a name into it and the
+status line switches within a second. No restart.
+
+**In a normal terminal:**
+
+```bash
+echo snake > ~/.claude/statusline-profile
+```
+
+**Inside Claude Code**, type the same thing with a `!` in front, and press Enter:
+
+```
+! echo snake > ~/.claude/statusline-profile
+```
+
+Or just ask Claude: *"switch my status line to snake"*.
+
+### Which names can I use?
+
+Any of these. Each one keeps the same 3-line layout and only swaps the animation on the left:
+
+| | | | |
+|:-:|:-:|:-:|:-:|
+| <img src="docs/rain.gif" width="150"><br>`rain` (default) | <img src="docs/lava.gif" width="150"><br>`lava` | <img src="docs/acid.gif" width="150"><br>`acid` | <img src="docs/tunnel.gif" width="150"><br>`tunnel` |
+| <img src="docs/aurora.gif" width="150"><br>`aurora` | <img src="docs/ember.gif" width="150"><br>`ember` | <img src="docs/warp.gif" width="150"><br>`warp` | <img src="docs/pulse.gif" width="150"><br>`pulse` |
+| <img src="docs/helix.gif" width="150"><br>`helix` | <img src="docs/ripple.gif" width="150"><br>`ripple` | <img src="docs/ecg.gif" width="150"><br>`ecg` | <img src="docs/hourglass.gif" width="150"><br>`hourglass` |
+| <img src="docs/life.gif" width="150"><br>`life` | <img src="docs/snake.gif" width="150"><br>`snake` | <img src="docs/smiley.gif" width="150"><br>`smiley` | <img src="docs/orbit.gif" width="150"><br>`orbit` |
+| <img src="docs/planet.gif" width="150"><br>`planet` | | | |
+
+These three change the layout instead:
+
+| name | what you get |
+|---|---|
+| `xhanAI` | the 3-line layout with the art from `~/.claude/statusline-art` (rain if you never set it) |
+| `simple` | the plainest bar, 2 lines (`default` also works) |
+| `max` | everything there is, 4 lines |
+
+A name that isn't on these lists gives you `simple`. Check what you have with `cat ~/.claude/statusline-profile`.
+
+### Try them before picking
+
+`statusline-demo` plays the animations in your terminal, through every mood. It runs until you press **Ctrl+C**,
+so start it in a separate terminal, not inside Claude Code:
+
+```bash
+statusline-demo          # every animation, one after the other
+statusline-demo snake    # just one
+```
+
+### Two smaller knobs
+
+```bash
+echo dots    > ~/.claude/statusline-rain   # the rain as braille dots instead of letters
+echo letters > ~/.claude/statusline-rain   # back to letters (the default)
+
+echo lava > ~/.claude/statusline-art       # what the plain `xhanAI` profile shows (default: rain)
+```
+
+You rarely need the art file: putting the animation's name straight into `statusline-profile` does the same.
+
+### Turn it off
+
+```bash
 jq 'del(.statusLine)' ~/.claude/settings.json > /tmp/s.json && mv /tmp/s.json ~/.claude/settings.json
 ```
 
-## Install
+Claude Code goes back to its own bar. Run `./install.sh` again to bring this one back.
 
-Needs `jq`.
-
-```bash
-git clone <this repo> && cd claude-statusline && ./install.sh
-```
-
-This copies the script to `~/.claude/`, sets `statusLine` in `~/.claude/settings.json` (backup saved as `settings.json.bak`) with `refreshInterval: 1` so the animation ticks.
-
-## Profiles
+## Update
 
 ```bash
-echo default > ~/.claude/statusline-profile   # the 2-line bar above
-echo max     > ~/.claude/statusline-profile   # everything, 4 lines
-echo xhanAI  > ~/.claude/statusline-profile   # minimal, 3 lines, lava lamp
-echo acid    > ~/.claude/statusline-profile   # xhanAI layout with another effect (see "Effects")
+cd ~/repos/active/claude-statusline && git pull && ./install.sh
 ```
+
+## Other commands
+
+```bash
+claude-cost          # money spent per project, most expensive first
+claude-cost .        # this project, session by session
+tools/make-gifs.py   # (repo only) regenerate the GIFs in docs/
+```
+
+## The layouts in detail
 
 The **max** profile:
 
@@ -78,7 +120,7 @@ user@host ~/repos/x ⎇ main ● 3 ↑1 │ cpu 4% ram 49% 38°C │ 🌦️ 13�
 - Past 90% of the 5h limit the rain turns red and a blinking `⚠ SLOW DOWN` appears.
 - Git branch, dirty file count (or ✔), ahead/behind; CPU load, RAM, CPU temperature; weather from wttr.in (cached 30 min, fetched in the background).
 
-The **xhanAI** profile: minimal, with a tiny lava lamp on the left:
+The **xhanAI** profile: minimal, with a small animation on the left (shown here with `lava`):
 
 ```
 ▀▀▀▀▀▀▀▀  ~/repos/active/claude-statusline on main ● 3  ↑ 1 synced 12m ago
@@ -110,26 +152,17 @@ Each `▀` has its own top (foreground) and bottom (background) colour, so the 8
 | alarm | red, pulsing | 5h limit or context at 90%+ |
 | clean | green flash for 6 s | the git tree just went from dirty to clean (you committed) |
 
-Run `lava-demo` to watch every mood at 15 fps. `echo rain > ~/.claude/statusline-art` brings back the matrix rain.
+Run `statusline-demo lava` to watch every mood at 15 fps (`echo lava > ~/.claude/statusline-profile` to use it).
 Cost: ~30 ms per refresh (one `jq`, one `awk` for the lava).
 
 ### Effects
 
-The same canvas can draw other things, borrowed from the badtrippin experiments. Each is a profile name
-(`echo tunnel > ~/.claude/statusline-profile`), or `echo tunnel > ~/.claude/statusline-art` under xhanAI:
-
-| | | | |
-|:-:|:-:|:-:|:-:|
-| <img src="docs/lava.gif" width="150"><br>`lava` | <img src="docs/acid.gif" width="150"><br>`acid` | <img src="docs/tunnel.gif" width="150"><br>`tunnel` | <img src="docs/aurora.gif" width="150"><br>`aurora` |
-| <img src="docs/ember.gif" width="150"><br>`ember` | <img src="docs/warp.gif" width="150"><br>`warp` | <img src="docs/pulse.gif" width="150"><br>`pulse` | <img src="docs/helix.gif" width="150"><br>`helix` |
-| <img src="docs/ripple.gif" width="150"><br>`ripple` | <img src="docs/ecg.gif" width="150"><br>`ecg` | <img src="docs/hourglass.gif" width="150"><br>`hourglass` | <img src="docs/life.gif" width="150"><br>`life` |
-| <img src="docs/smiley.gif" width="150"><br>`smiley` | <img src="docs/snake.gif" width="150"><br>`snake` | <img src="docs/rain.gif" width="150"><br>`rain` | <img src="docs/orbit.gif" width="150"><br>`orbit` | <img src="docs/planet.gif" width="150"><br>`planet` |
-
-The live bar redraws once a second; the GIFs are smoother (12 fps). Regenerate them with `tools/make-gifs.py`.
+The same canvas can draw other things, borrowed from the badtrippin experiments (pictures under
+[Which names can I use?](#which-names-can-i-use)). The live bar redraws once a second; the GIFs are smoother (12 fps).
 
 | effect | what it is |
 |---|---|
-| lava | the lava lamp above (default) |
+| lava | the lava lamp above |
 | acid | rainbow plasma: six sine waves run through HSV, like badtrippin's `me.py` |
 | tunnel | a spiral tunnel rushing at you |
 | aurora | northern lights curtains over a twinkling sky |
@@ -145,7 +178,7 @@ The live bar redraws once a second; the GIFs are smoother (12 fps). Regenerate t
 | orbit | strokes only: a tiny globe outline with three satellites orbiting it, see-through (braille, 16x12 dots) |
 | smiley | the classic yellow smiley as pixel art (sextants, 16x9), whose expression is the mood: smiles and blinks (calm), focuses with darting eyes (working), grins and sweats (fire), sleeps with a z (idle), frets (warn), gasps (alarm), beams ^^ (clean) |
 | planet | a lit, turning lava planet with an atmosphere, in a see-through sky (sextants, see below) |
-| rain | the 3-row matrix rain |
+| rain | the 3-row matrix rain, in katakana letters or braille dots (default) |
 
 The effects keep their own colours and wear the mood on top: busy makes them faster and brighter,
 idle dims and slows them, warn tints amber, alarm pulses red, clean flashes green.
@@ -158,7 +191,7 @@ that best fit its six pixels. The planet's surface wears the lava's mood colours
 Sextants are drawn natively by VTE terminals (GNOME Terminal, Ptyxis, Tilix), kitty, WezTerm, foot and
 Windows Terminal; elsewhere you need a font with the Legacy Computing block (Cascadia, Iosevka), or you'll see boxes.
 
-`lava-demo tunnel` shows one effect through every mood; `lava-demo all` cycles through all of them.
+`statusline-demo tunnel` shows one effect through every mood; `statusline-demo` alone cycles through all of them.
 
 ## Project cost over time
 
@@ -173,13 +206,6 @@ restarts its counter, it counts on from zero and nothing is lost.
 
 Only sessions run with this status line are counted; earlier ones aren't in the ledger. Before
 2026-10-13 everything was charged to the directory Claude Code was started in, so those totals sit there.
-
-## Rain style
-
-```bash
-echo dots    > ~/.claude/statusline-rain   # braille dots (default)
-echo letters > ~/.claude/statusline-rain   # katakana, very trippy
-```
 
 ## How it works
 
