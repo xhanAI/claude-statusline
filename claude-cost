@@ -1,33 +1,103 @@
 #!/usr/bin/env bash
-# claude-cost: all-time Claude Code cost per project, from the status line's ledger.
-# a project is a git repo (or a plain dir); money is charged to wherever the session was when it was spent.
-#   claude-cost          every project, most expensive first
-#   claude-cost <dir>    one project (e.g. "."), with its sessions
-LEDGER="$HOME/.claude/cost-ledger"
-[ -d "$LEDGER" ] || { echo "No ledger yet; it fills as you use Claude Code with the status line."; exit 0; }
+# claude-cost: all-time Claude Code cost per project. A project is the repo (or dir) Claude Code was
+# STARTED in; a session is charged there in full, wherever it wanders.
+#   claude-cost                every project, most expensive first
+#   claude-cost <dir>          one project (e.g. "."), with its sessions
+#   claude-cost --session-end  the SessionEnd hook: books the ending session (JSON on stdin) into the totals
+#   claude-cost --book-all     books every session now (safe to repeat, only new money is added)
+#   claude-cost --migrate      converts ledgers from the old per-directory format (install.sh runs it)
+#
+# files, all in ~/.claude:
+#   cost-ledger/<session>  written by the status line: project, spent, last (session cost as last seen)
+#   cost-totals.tsv        project <TAB> total $ <TAB> sessions <TAB> last active (epoch); kept by this script
+#   cost-booked.tsv        session <TAB> $ already added to cost-totals.tsv
+# a total is cost-totals.tsv plus whatever the ledgers hold that is not booked yet, so it is right
+# even for sessions the hook never saw (killed terminal, crash).
+LEDGER="$HOME/.claude/cost-ledger"; TOTALS="$HOME/.claude/cost-totals.tsv"; BOOKED="$HOME/.claude/cost-booked.tsv"
 
-# every ledger line as: project <TAB> dollars <TAB> last-active epoch <TAB> session
-entries() {
+# add the unbooked part of the given sessions to the totals, under a lock (sessions can end together)
+book() {
+  [ $# -gt 0 ] || return 0
+  exec 9>"$HOME/.claude/cost-totals.lock"; flock -w 5 9 || return 1
+  touch "$TOTALS" "$BOOKED"
+  local ids; ids=$(printf '%s\n' "$@")
+  awk -F'\t' -v OFS='\t' -v T="$TOTALS" -v B="$BOOKED" -v L="$LEDGER/" -v ids="$ids" '
+    BEGIN { n = split(ids, want, "\n"); for (i = 1; i <= n; i++) if (want[i] != "") w[L want[i]] = 1 }
+    FILENAME == T { tot[$1] = $2; ses[$1] = $3; last[$1] = $4; next }
+    FILENAME == B { bk[$1] = $2; next }
+    !(FILENAME in w) { next }
+    FNR == 1 { cmd = "stat -c %Y \"" FILENAME "\""; cmd | getline mt[FILENAME]; close(cmd) }
+    $1 == "project" { pr[FILENAME] = $2 } $1 == "spent" { sp[FILENAME] = $2 }
+    END {
+      for (f in pr) {
+        id = substr(f, length(L) + 1); d = sp[f] - bk[id]
+        if (d < 0.000001) continue
+        if (!(id in bk) || bk[id] == 0) ses[pr[f]]++
+        tot[pr[f]] += d; if (mt[f] > last[pr[f]]) last[pr[f]] = mt[f]; bk[id] = sp[f]
+      }
+      for (p in tot) printf "%s\t%.6f\t%d\t%s\n", p, tot[p], ses[p], last[p] > T ".tmp"
+      for (id in bk) printf "%s\t%.6f\n", id, bk[id] > B ".tmp"
+    }' "$TOTALS" "$BOOKED" $(printf "$LEDGER/%s\n" "$@" | while read -r f; do [ -f "$f" ] && echo "$f"; done)
+  [ -f "$TOTALS.tmp" ] && mv "$TOTALS.tmp" "$TOTALS"
+  [ -f "$BOOKED.tmp" ] && mv "$BOOKED.tmp" "$BOOKED"
+  flock -u 9
+}
+
+# old ledgers charged money to whatever dir the session was in; recharge it all to the start dir,
+# which is the cwd of the first entry in the session's transcript
+migrate() {
+  local f id t start key cost spent
   for f in "$LEDGER"/*; do
-    awk -F'\t' -v t="$(stat -c %Y "$f")" -v s="${f##*/}" \
-      '$1 != "@last" && NF >= 2 {printf "%s\t%.6f\t%s\t%s\n", $1, $2 + $3, t, s}' "$f"
+    [ -f "$f" ] && ! grep -q '^project	' "$f" || continue
+    id=${f##*/}
+    t=$(ls "$HOME"/.claude/projects/*/"$id".jsonl 2>/dev/null | head -1)
+    start=$([ -n "$t" ] && grep -m1 -o '"cwd":"[^"]*"' "$t" | cut -d'"' -f4)
+    # no transcript left: charge the dir that got the most
+    [ -z "$start" ] && start=$(awk -F'\t' '$1 != "@last" && NF >= 2 && $2 + $3 > m {m = $2 + $3; d = $1} END{print d}' "$f")
+    key=$(git -C "$start" rev-parse --show-toplevel 2>/dev/null); key=${key:-$start}
+    read -r cost spent < <(awk -F'\t' '$1 == "@last" {l = $2; next} NF >= 2 {s += $2 + $3; if (NF >= 3 && l == "") l = $3} END{printf "%s %.6f\n", (l == "" ? 0 : l), s}' "$f")
+    printf 'project\t%s\nspent\t%s\nlast\t%s\n' "$key" "$spent" "$cost" > "$f.tmp" && touch -r "$f" "$f.tmp" && mv "$f.tmp" "$f"
+    echo "  ${id:0:8}  \$$spent  -> ${key/#$HOME/\~}"
   done; }
+
+case $1 in
+  --session-end)
+    id=$(jq -r '.session_id // empty' 2>/dev/null)
+    [ -n "$id" ] && book "$id"; exit 0 ;;
+  --book-all) cd "$LEDGER" 2>/dev/null && book *; exit ;;
+  --migrate) [ -d "$LEDGER" ] && migrate; exit ;;
+esac
+
+[ -d "$LEDGER" ] || [ -f "$TOTALS" ] || { echo "No costs yet; they fill as you use Claude Code with the status line."; exit 0; }
+
+# per session: project <TAB> spent <TAB> booked <TAB> last active <TAB> session
+sessions() {
+  awk -F'\t' -v B="$BOOKED" '
+    FILENAME == B { bk[$1] = $2; next }
+    FNR == 1 { n = split(FILENAME, a, "/"); id = a[n]; cmd = "stat -c %Y \"" FILENAME "\""; cmd | getline t[id]; close(cmd) }
+    $1 == "project" { pr[id] = $2 } $1 == "spent" { sp[id] = $2 }
+    END { for (id in pr) printf "%s\t%.6f\t%.6f\t%s\t%s\n", pr[id], sp[id], bk[id], t[id], id }' \
+    $([ -f "$BOOKED" ] && echo "$BOOKED") "$LEDGER"/* 2>/dev/null; }
 
 if [ -n "$1" ]; then
   dir=$(cd "$1" 2>/dev/null && { git rev-parse --show-toplevel 2>/dev/null || pwd; } || echo "$1")
-  entries | awk -F'\t' -v d="$dir" '$1==d' | sort -t$'\t' -k3,3n | awk -F'\t' -v d="${dir/#$HOME/\~}" '
-    BEGIN{printf "%s\n\n  %-16s  %9s  %s\n", d, "last active", "cost", "session"}
-    {cmd = "date -d @" $3 " \"+%Y-%m-%d %H:%M\""; cmd | getline when; close(cmd)
-     printf "  %-16s  %9s  %s\n", when, sprintf("$%.2f", $2), substr($4,1,8); s+=$2; n++}
-    END{printf "\n  %d sessions, total $%.2f\n", n, s}'
+  sessions | awk -F'\t' -v d="$dir" '$1 == d' | sort -t$'\t' -k4,4n | awk -F'\t' -v d="${dir/#$HOME/\~}" -v tf="$TOTALS" '
+    BEGIN { printf "%s\n\n  %-16s  %9s  %s\n", d, "last active", "cost", "session" }
+    { cmd = "date -d @" $4 " \"+%Y-%m-%d %H:%M\""; cmd | getline when; close(cmd)
+      printf "  %-16s  %9s  %s%s\n", when, sprintf("$%.2f", $2), substr($5, 1, 8), ($2 - $3 > 0.005 ? "  (live / not booked yet)" : "")
+      s += $2; n++ }
+    END { printf "\n  %d sessions, total $%.2f\n", n, s }'
   exit
 fi
 
-rows=$(entries | awk -F'\t' '{s[$1]+=$2; n[$1]++; if ($3>t[$1]) t[$1]=$3}
-  END{for (p in s) printf "%.2f\t%d\t%s\t%s\n", s[p], n[p], t[p], p}' | sort -t$'\t' -k1,1 -rn)
+# booked totals + every unbooked remainder, per project
+rows=$( { [ -f "$TOTALS" ] && awk -F'\t' '{printf "%s\t%s\t%s\t%s\n", $1, $2, $3, $4}' "$TOTALS"
+          sessions | awk -F'\t' '$2 - $3 > 0.000001 {printf "%s\t%.6f\t%d\t%s\n", $1, $2 - $3, ($3 == 0), $4}'
+        } | awk -F'\t' '{s[$1] += $2; n[$1] += $3; if ($4 > t[$1]) t[$1] = $4}
+            END {for (p in s) printf "%.2f\t%d\t%s\t%s\n", s[p], n[p], t[p], p}' | sort -t$'\t' -k1,1 -rn)
 
 printf '  %10s  %8s  %-10s  %s\n' total sessions "last" project
 while IFS=$'\t' read -r tot n t p; do
-  printf '  %10s  %8d  %-10s  %s\n' "\$$tot" "$n" "$(date -d @"$t" +%Y-%m-%d)" "${p/#$HOME/\~}"
+  [ -n "$p" ] && printf '  %10s  %8d  %-10s  %s\n' "\$$tot" "$n" "$(date -d @"$t" +%Y-%m-%d)" "${p/#$HOME/\~}"
 done <<< "$rows"
-echo "$rows" | awk -F'\t' '{s+=$1} END{printf "\n  all projects: $%.2f\n", s}'
+echo "$rows" | awk -F'\t' '{s += $1} END {printf "\n  all projects: $%.2f\n", s}'

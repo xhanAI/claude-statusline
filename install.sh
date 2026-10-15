@@ -17,8 +17,16 @@ done
 settings="$dest/settings.json"
 [ -f "$settings" ] || echo '{}' > "$settings"
 cp "$settings" "$settings.bak"
-jq --arg cmd "bash $dest/statusline-command.sh" \
-  '.statusLine = {type: "command", command: $cmd, refreshInterval: 1}' \
+# the status line, plus a SessionEnd hook that books each finished session into ~/.claude/cost-totals.tsv
+# (any older copy of that hook is replaced, other hooks are kept)
+jq --arg cmd "bash $dest/statusline-command.sh" --arg hook "bash $HOME/.local/bin/claude-cost --session-end" '
+  .statusLine = {type: "command", command: $cmd, refreshInterval: 1}
+  | .hooks.SessionEnd = ([.hooks.SessionEnd[]? | .hooks |= map(select(.command | test("claude-cost --session-end") | not)) | select(.hooks | length > 0)]
+                         + [{hooks: [{type: "command", command: $hook}]}])' \
   "$settings.bak" > "$settings"
+
+# costs: convert old per-directory ledgers to per-start-dir, then book everything so far
+"$HOME/.local/bin/claude-cost" --migrate
+"$HOME/.local/bin/claude-cost" --book-all
 echo "Installed. Backup of your settings: $settings.bak"
 echo "Restart Claude Code. Change the look any time: echo snake > $dest/statusline-profile"

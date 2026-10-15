@@ -100,6 +100,7 @@ cd ~/repos/active/claude-statusline && git pull && ./install.sh
 ```bash
 claude-cost          # money spent per project, most expensive first
 claude-cost .        # this project, session by session
+claude-cost --book-all   # book every session into ~/.claude/cost-totals.tsv now
 tools/make-gifs.py   # (repo only) regenerate the GIFs in docs/
 ```
 
@@ -123,19 +124,25 @@ user@host ~/repos/x ⎇ main ● 3 ↑1 │ cpu 4% ram 49% 38°C │ 🌦️ 13�
 The **xhanAI** profile: minimal, with a small animation on the left (shown here with `lava`):
 
 ```
-▀▀▀▀▀▀▀▀  ~/repos/active/claude-statusline on main ● 3  ↑ 1 synced 12m ago
-▀▀▀▀▀▀▀▀  opus 5.5 med   🌦️ 13°C   v2.1.296
-▀▀▀▀▀▀▀▀  12m11s ✦ 2m30s   $0.97 4.75/h Σ $19.52   5h 48% 2h06m   ctx 8%   +152 −51
+▀▀▀▀▀▀▀▀  ~/repos/active/claude-statusline   adrian-x364   opus 5.5 ▄   🌦️ 13°C
+▀▀▀▀▀▀▀▀  ~/repos/active/claude-statusline/docs on main ● 3  ↑ 1  +152 −51 synced 12m ago
+▀▀▀▀▀▀▀▀  12m11s ✦ 2m30s   $0.97 Σ $19.52   5h 48% ⏲ ▅   ctx 8%   v2.1.296
 ```
+
+Line 1 is where the session **started** (blue), line 2 is where it **is now** (orange), one under the other.
+After the start dir comes the GitHub account `gh` is logged in as, read from `~/.config/gh/hosts.yml` (no network), so you can
+tell your work and home logins apart; each account gets its own colour, and `gh auth switch` shows up within a second.
 
 After the branch: `● 3` changed files, then the remote: `↑ 2` commits not pushed, `↓ 1` commits to pull
 (as of the last fetch), `✓` in sync, `no remote` if the branch was never pushed, and `synced 12m ago`,
 the last fetch, pull or push. The status line never fetches by itself; run `git fetch` to refresh ↓.
-If the session has moved away from the folder Claude Code was started in, the line ends with `started in ~/x`.
 
-The path and branch get a line to themselves so their changing length never shifts anything else.
-Line 2 is the model + effort, weather and version; line 3 is the numbers
-(session time, Claude time, cost + hourly rate + project total, 5h limit + time to reset, context, lines changed).
+Nothing on line 1 changes during a session, so it can carry the model, effort and weather without anything
+shifting. The effort is a one-column level meter that fills from the bottom: `▂` low, `▄` medium, `▅` high, `▇` xhigh, `█` max.
+Line 2 is the current path and branch, with the lines changed this session just before `synced`. Line 3 is the
+numbers: session time, Claude time, session cost + project total, the 5h limit, context, and the version last.
+After the 5h limit, `⏲` and a block in the same style as the effort show the reset charging up like a
+battery: `▂` red when the window has just started, through `▄ ▅ ▇`, to `█` green when the reset is close.
 
 ### The lava
 
@@ -195,17 +202,24 @@ Windows Terminal; elsewhere you need a font with the Legacy Computing block (Cas
 
 ## Project cost over time
 
-The status line keeps a tiny file per session in `~/.claude/cost-ledger/<session-id>`, written only
-when the cost changes. A project is the **git repo you are in** (or the directory, outside a repo), and
-every increase in the session cost is charged to wherever the session is when it happens. So one
-session started in `~` that works in three repos charges each repo its own share. If a resumed session
-restarts its counter, it counts on from zero and nothing is lost.
+A project is the **repo (or directory) Claude Code was started in**, and the whole session is charged
+there, however far it wanders. Start in `~/repos/x`, `cd` into three other repos, and all of it still lands on `~/repos/x`.
 
-- The xhanAI profile shows the project's all-time total next to the session cost: `$0.97 4.75/h Σ $23.10`.
-- `claude-cost` lists every project, most expensive first; `claude-cost <dir>` lists that project's sessions.
+- While a session runs, the status line keeps its cost in `~/.claude/cost-ledger/<session-id>`.
+- When a session ends (`/exit`, Ctrl+D, `/clear`, logout), a `SessionEnd` hook, `claude-cost --session-end`,
+  books it into **`~/.claude/cost-totals.tsv`**: one line per project with its total, number of sessions and last
+  active time. `install.sh` adds the hook to `~/.claude/settings.json`.
+- Hooks fire on these events, not on what you type: "thanks, bye" doesn't end anything, exiting does.
+  If a session never gets its hook (terminal killed, crash), nothing is lost: the Σ and `claude-cost`
+  always add the ledgers that are not booked yet, and the next `claude-cost --book-all` books them.
+- If a resumed session restarts its counter, it counts on from zero and nothing is lost.
 
-Only sessions run with this status line are counted; earlier ones aren't in the ledger. Before
-2026-10-13 everything was charged to the directory Claude Code was started in, so those totals sit there.
+The xhanAI profile shows the start project's all-time total next to the session cost: `$0.97 4.75/h Σ $23.10`.
+`claude-cost` lists every project, most expensive first; `claude-cost <dir>` lists that project's sessions.
+
+Only sessions run with this status line are counted. Ledgers from before 2026-10-15 charged money to
+whatever directory the session was in at the time; `install.sh` moves all of it to each session's start
+directory (read from its transcript).
 
 ## How it works
 

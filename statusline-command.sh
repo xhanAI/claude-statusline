@@ -22,35 +22,57 @@ profile=${STATUSLINE_PROFILE:-$(cat "$HOME/.claude/statusline-profile" 2>/dev/nu
 profile=${profile:-xhanAI}
 now=$(date +%s)
 
-# cost ledger: one tiny file per session in ~/.claude/cost-ledger, holding
-#   @last <TAB> session cost at the previous write
-#   project <TAB> dollars          (one line per project the session spent money in)
-# a project is the git repo the status line is looking at (or the dir when it is not a repo),
-# so a session started in ~ that wanders into three repos charges each repo its own share:
-# every increase in the session cost goes to wherever you are when it happens. if the cost
-# ever drops (a resumed session restarted its counter), the new amount counts from zero.
-# written only when the cost changes. `claude-cost` prints a report.
-# (older files are "project <TAB> banked <TAB> last"; they are read as project = banked+last.)
-LEDGER="$HOME/.claude/cost-ledger"
-pkey=""
+# cost ledger: one tiny file per session in ~/.claude/cost-ledger/<session-id>, holding
+#   project <TAB> the repo (or dir) Claude Code was STARTED in; the whole session is charged there
+#   spent   <TAB> what the session has cost so far
+#   last    <TAB> the session cost at the previous write
+# if the cost ever drops (a resumed session restarted its counter), the new amount counts from zero.
+# `last` is kept as the exact string Claude Code sent, and drops under a tenth of a cent are ignored.
+# written only when the cost changes. when a session ends, a SessionEnd hook (`claude-cost --session-end`)
+# books it into ~/.claude/cost-totals.tsv (project, total, sessions, last booked); what it booked per
+# session is in ~/.claude/cost-booked.tsv. the Σ shown is the booked total plus every not-yet-booked
+# amount, so it is right even when the hook never ran. `claude-cost` prints a report.
+LEDGER="$HOME/.claude/cost-ledger"; TOTALS="$HOME/.claude/cost-totals.tsv"; BOOKED="$HOME/.claude/cost-booked.tsv"
 gitdir=""   # the shared .git dir, for the time of the last fetch (FETCH_HEAD)
-[ -n "$cwd" ] && { { read -r pkey; read -r gitdir; } < <(git -C "$cwd" rev-parse --path-format=absolute --show-toplevel --git-common-dir 2>/dev/null); pkey=${pkey:-$cwd}; }
-if [ -n "$sid" ] && [ -n "$cost" ] && [ -n "$pkey" ]; then
-  lf="$LEDGER/$sid"; last=0
-  if [ -f "$lf" ]; then
-    IFS=$'\t' read -r a b c < "$lf"
-    if [ "$a" = @last ]; then last=$b; else last=${c:-0}; fi
-  fi
-  if [ "$cost" != "$last" ]; then
+[ -n "$cwd" ] && { read -r _ ; read -r gitdir; } < <(git -C "$cwd" rev-parse --path-format=absolute --show-toplevel --git-common-dir 2>/dev/null)
+start=${proj:-$cwd}   # where this session was started
+skey=""               # the project it is charged to: the repo around $start, or $start itself
+if [ -n "$sid" ] && [ -n "$start" ]; then
+  lf="$LEDGER/$sid"; lspent=0; llast=0
+  [ -f "$lf" ] && while IFS=$'\t' read -r k v; do
+    case $k in project) skey=$v ;; spent) lspent=$v ;; last) llast=$v ;; esac
+  done < "$lf"
+  [ -z "$skey" ] && { skey=$(git -C "$start" rev-parse --show-toplevel 2>/dev/null); skey=${skey:-$start}; }
+  if [ -n "$cost" ] && [ "$cost" != "$llast" ]; then
     mkdir -p "$LEDGER"
-    { [ -f "$lf" ] && cat "$lf"; } | awk -F'\t' -v k="$pkey" -v c="$cost" -v l="$last" '
-      $1 == "@last" { next }
-      NF >= 2 { s[$1] += $2 + $3 }
-      END { s[k] += (c + 0 < l + 0) ? c : c - l
-            printf "@last\t%s\n", c; for (p in s) printf "%s\t%.6f\n", p, s[p] }' > "$lf.tmp" && mv "$lf.tmp" "$lf"
+    awk -v k="$skey" -v c="$cost" -v l="$llast" -v s="$lspent" 'BEGIN{
+      if (c + 0.001 < l + 0) s += c         # the counter restarted (resumed session)
+      else if (c + 0 > l + 0) s += c - l
+      printf "project\t%s\nspent\t%.6f\nlast\t%s\n", k, s, c }' > "$lf.tmp" && mv "$lf.tmp" "$lf"
   fi
 fi
-project_total() { [ -d "$LEDGER" ] && cat "$LEDGER"/* 2>/dev/null | awk -F'\t' -v p="$pkey" '$1==p{s+=$2+$3} END{printf "%.2f", s}'; }
+# all-time cost of the project this session was started in: booked totals + whatever is not booked yet
+project_total() {
+  [ -n "$skey" ] && [ -d "$LEDGER" ] || return
+  awk -F'\t' -v p="$skey" -v T="$TOTALS" -v B="$BOOKED" '
+    FILENAME == T { if ($1 == p) s += $2; next }
+    FILENAME == B { bk[$1] = $2; next }
+    { n = split(FILENAME, a, "/"); id = a[n] }
+    $1 == "project" { pr[id] = $2 } $1 == "spent" { sp[id] = $2 }
+    END { for (id in pr) if (pr[id] == p) s += sp[id] - bk[id]; printf "%.2f", s }' \
+    $( [ -f "$TOTALS" ] && echo "$TOTALS" ) $( [ -f "$BOOKED" ] && echo "$BOOKED" ) "$LEDGER"/*; }
+# the GitHub account `gh` is logged in as (the active one in ~/.config/gh/hosts.yml), no network
+gh_user() {
+  local f="${GH_CONFIG_DIR:-$HOME/.config/gh}/hosts.yml" line host=""
+  [ -n "$GH_TOKEN$GITHUB_TOKEN" ] && { printf 'token'; return; }
+  [ -f "$f" ] || return
+  while IFS= read -r line; do
+    case $line in [!\ ]*:) host=${line%:} ;; "    user: "*) [ "$host" = github.com ] && { printf '%s' "${line#    user: }"; return; } ;; esac
+  done < "$f"; }
+# a stable colour per account, so work and home look different at a glance
+gh_colour() { local u=$1 i c h=0
+  for ((i=0;i<${#u};i++)); do printf -v c '%d' "'${u:i:1}"; h=$(( (h * 31 + c) % 6 )); done
+  case $h in 0) fg 120 230 150 ;; 1) fg 255 120 200 ;; 2) fg 120 200 255 ;; 3) fg 255 210 90 ;; 4) fg 190 150 255 ;; *) fg 255 140 100 ;; esac; }
 
 R=$'\033[0m'; DIM=$'\033[2m'; B=$'\033[1m'
 fg() { printf '\033[38;2;%s;%s;%sm' "$1" "$2" "$3"; }
@@ -184,7 +206,9 @@ render_max() {
   [ -n "$L" ] && printf '%s\n' "$L"
 
   # line 4, place and machine: user@host, dir, git, cpu, ram, temp, weather
-  L="$(fg 120 230 150)$(whoami)@$(hostname -s)${R} $(fg 110 170 255)${cwd/#$HOME/\~}${R}"
+  L="$(fg 120 230 150)$(whoami)@$(hostname -s)${R}"
+  local gu; gu=$(gh_user); [ -n "$gu" ] && L+=" ${GR}gh${R} $(gh_colour "$gu")${gu}${R}"
+  L+=" $(fg 110 170 255)${cwd/#$HOME/\~}${R}"
   local gs br dirty ab
   if [ -n "$cwd" ] && gs=$(timeout 0.3 git -C "$cwd" --no-optional-locks status --porcelain=v2 --branch 2>/dev/null); then
     br=$(echo "$gs" | awk '/^# branch.head/{print $3}')
@@ -693,8 +717,31 @@ render_xhanai() {
     canvas "$art" "${ART_T:-$now}" "$(art_mood)"; P0=${ART[0]}; P1=${ART[1]}; P2=${ART[2]}
   fi
 
-  # line 1, where: dir + branch alone, so their changing length never shifts anything else
-  L="$P0  $(fg 110 170 255)${B}${cwd/#$HOME/\~}${R}"
+  # line 1, where it started + who: start dir, gh account, model + effort, weather.
+  # none of these change during a session, so nothing on this line ever shifts
+  local gu; gu=$(gh_user)
+  L="$P0  $(fg 110 170 255)${B}${start/#$HOME/\~}${R}"
+  [ -n "$gu" ] && L+="${SP}$(gh_colour "$gu")${B}${gu}${R}"
+  [ -n "$model" ] && L+="${SP}$(fg 255 170 100)${model,,}${R}"
+  # effort as a one-column level meter: the block fills up from the bottom, low ▂ .. max █,
+  # and warms from yellow to red as it rises
+  local lv=0 bars=(▂ ▄ ▅ ▇ █)
+  case $effort in low) lv=1 ;; medium) lv=2 ;; high) lv=3 ;; xhigh) lv=4 ;; max) lv=5 ;; esac
+  [ "$lv" -gt 0 ] && L+=" $(fg 255 $(( 230 - lv * 30 )) $(( 140 - lv * 25 )))${bars[lv-1]}${R}"
+  local wf="$HOME/.cache/claude-statusline-weather"
+  if [ ! -f "$wf" ] || [ $(( now - $(stat -c %Y "$wf") )) -gt 1800 ]; then
+    mkdir -p "${wf%/*}"; touch "$wf"
+    ( curl -s -m 5 'https://wttr.in/?format=%c%t' > "$wf.tmp" && mv "$wf.tmp" "$wf" ) >/dev/null 2>&1 &
+  fi
+  w=$(tr -d '\n+' < "$wf" 2>/dev/null | sed 's/  */ /g')
+  [ -n "$w" ] && [ ${#w} -lt 20 ] && L+="${SP}${w}"
+  printf '%s\n' "$L"
+
+  # line 2, where it is now: current dir + branch, right under the start dir, alone on the line
+  # so their changing length never shifts anything else
+  L="$P1  $(fg 255 150 60)${B}${cwd/#$HOME/\~}${R}"
+  # lines changed this session; they go just before "synced" (or at the end when there's no sync to show)
+  local D=""; [ -n "$added" ] && D="  $(fg 80 220 140)+${added}${R} $(fg 255 95 95)−${removed:-0}${R}"
   if [ -n "$br" ]; then
     L+=" ${GR}on${R} $(fg 200 150 255)${br}${R}"
     [ "$dirty" -gt 0 ] && L+=" $(fg 250 200 70)● ${dirty}${R}"
@@ -707,29 +754,12 @@ render_xhanai() {
       # last time we talked to the remote: fetch / pull write FETCH_HEAD, fetch / pull / push the upstream's reflog
       local seen; seen=$(stat -c %Y "$gitdir/FETCH_HEAD" "$gitdir/logs/refs/remotes/$up" 2>/dev/null | sort -n | tail -1)
       if [ -n "$seen" ]; then
+        L+="$D"; D=""
         if [ $(( now - seen )) -lt 60 ]; then L+=" ${GR}synced just now${R}"; else L+=" ${GR}synced $(ago $(( now - seen ))) ago${R}"; fi
       fi
     fi
   fi
-  # started somewhere else? say where, at the end so nothing else moves
-  [ -n "$proj" ] && [ "$proj" != "$cwd" ] && L+="   ${GR}started in${R} $(fg 110 170 255)${proj/#$HOME/\~}${R}"
-  printf '%s\n' "$L"
-
-  # line 2, what: model, weather, version
-  L="$P1 "
-  if [ -n "$model" ]; then
-    case $effort in medium) e=med ;; *) e=$effort ;; esac
-    L+=" $(fg 255 170 100)${model,,}${R}${e:+ ${GR}${e}${R}}"
-  fi
-  local wf="$HOME/.cache/claude-statusline-weather"
-  if [ ! -f "$wf" ] || [ $(( now - $(stat -c %Y "$wf") )) -gt 1800 ]; then
-    mkdir -p "${wf%/*}"; touch "$wf"
-    ( curl -s -m 5 'https://wttr.in/?format=%c%t' > "$wf.tmp" && mv "$wf.tmp" "$wf" ) >/dev/null 2>&1 &
-  fi
-  w=$(tr -d '\n+' < "$wf" 2>/dev/null | sed 's/  */ /g')
-  [ -n "$w" ] && [ ${#w} -lt 20 ] && L+="${SP}${w}"
-  [ -n "$ver" ] && L+="${SP}${GR}v${ver}${R}"
-  printf '%s\n' "$L"
+  printf '%s\n' "$L$D"
 
   # line 3, numbers: times, money, limit, context, diff
   L="$P2 "
@@ -737,18 +767,27 @@ render_xhanai() {
   [ -n "$api" ] && L+=" $(fg 217 119 87)✦ $(fmt "${api%.*}")${R}"
   if [ -n "$cost" ]; then
     L+="${SP}$(fg 240 200 90)\$$(printf '%.2f' "$cost")${R}"
-    [ -n "$total" ] && [ "${total%.*}" -gt 60000 ] && \
-      L+=" ${GR}$(awk -v c="$cost" -v t="$total" 'BEGIN{printf "%.2f/h", c/(t/3600000)}')${R}"
-    # all-time cost of this project (every session started in it)
+    # all-time cost of the project this session was started in (every session started there)
     local pt; pt=$(project_total)
     [ -n "$pt" ] && [ "$pt" != 0.00 ] && L+=" ${GR}Σ${R} $(fg 240 200 90)\$${pt}${R}"
   fi
   if [ -n "$five" ]; then
     L+="${SP}${GR}5h${R} $(heat "$five")$(printf '%.0f' "$five")%${R}"
-    [ -n "$(until_ "$reset")" ] && L+=" ${GR}$(until_ "$reset")${R}"
+    # the 5h reset as a battery charging back up: ⏲ and a one-column block like the effort that fills
+    # from ▂ (window just started, red) to █ (about to reset, green).
+    # some fonts draw ⏲ as a wide emoji, so a space keeps it off the block
+    if [ -n "$reset" ]; then
+      local left=$(( (${reset%.*} - now) * 100 / 18000 )) chg blk
+      if [ "$left" -ge 0 ] && [ "$left" -le 100 ]; then
+        chg=$(( 100 - left ))
+        if [ "$chg" -gt 80 ]; then blk=█; elif [ "$chg" -gt 60 ]; then blk=▇; elif [ "$chg" -gt 40 ]; then blk=▅
+        elif [ "$chg" -gt 20 ]; then blk=▄; else blk=▂; fi
+        L+=" ${GR}⏲${R} $(fg $(( 255 - chg * 175 / 100 )) $(( 80 + chg * 140 / 100 )) $(( 80 + chg * 60 / 100 )))${blk}${R}"
+      fi
+    fi
   fi
   [ -n "$used" ] && L+="${SP}${GR}ctx${R} $(heat "$used")$(printf '%.0f' "$used")%${R}"
-  [ -n "$added" ] && L+="${SP}$(fg 80 220 140)+${added}${R} $(fg 255 95 95)−${removed:-0}${R}"
+  [ -n "$ver" ] && L+="${SP}${GR}v${ver}${R}"
   printf '%s\n' "$L"
 }
 
