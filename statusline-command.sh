@@ -74,6 +74,19 @@ gh_colour() { local u=$1 i c h=0
   for ((i=0;i<${#u};i++)); do printf -v c '%d' "'${u:i:1}"; h=$(( (h * 31 + c) % 6 )); done
   case $h in 0) fg 120 230 150 ;; 1) fg 255 120 200 ;; 2) fg 120 200 255 ;; 3) fg 255 210 90 ;; 4) fg 190 150 255 ;; *) fg 255 140 100 ;; esac; }
 
+# the Claude account this session is logged in as: name <TAB> email, from the .claude.json of the config dir
+# in use (CLAUDE_CONFIG_DIR, or ~/.claude.json), so two subscriptions run side by side are easy to tell apart.
+# that file is big and changes often, so the answer is cached and re-read only when the file is newer
+claude_account() {
+  local f="${CLAUDE_CONFIG_DIR:+$CLAUDE_CONFIG_DIR/.claude.json}" c
+  f=${f:-$HOME/.claude.json}; [ -f "$f" ] || return
+  c="$HOME/.cache/claude-statusline/account-$(printf '%s' "$f" | cksum | cut -d' ' -f1)"
+  if [ ! -f "$c" ] || [ "$f" -nt "$c" ]; then
+    mkdir -p "${c%/*}"
+    jq -r '.oauthAccount // empty | [.displayName // "", .emailAddress // ""] | @tsv' "$f" > "$c.tmp" 2>/dev/null && mv "$c.tmp" "$c"
+  fi
+  cat "$c" 2>/dev/null; }
+
 R=$'\033[0m'; DIM=$'\033[2m'; B=$'\033[1m'
 fg() { printf '\033[38;2;%s;%s;%sm' "$1" "$2" "$3"; }
 SEP="${DIM}$(fg 110 110 140) │ ${R}"
@@ -790,6 +803,14 @@ render_xhanai() {
   [ -n "$ver" ] && L+="${SP}${GR}v${ver}${R}"
   printf '%s\n' "$L"
 }
+
+# the very top line, above every layout: which Claude account this is, in its own colour
+IFS=$'\t' read -r aname amail < <(claude_account)
+if [ -n "$aname$amail" ]; then
+  L="$(gh_colour "${amail:-$aname}")${B}${aname:-$amail}${R}"
+  [ -n "$aname" ] && [ -n "$amail" ] && L+="  $(fg 120 120 145)${amail}${R}"
+  printf '%s\n' "$L"
+fi
 
 case $profile in
   max) render_max ;;

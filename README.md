@@ -124,10 +124,16 @@ user@host ~/repos/x ⎇ main ● 3 ↑1 │ cpu 4% ram 49% 38°C │ 🌦️ 13�
 The **xhanAI** profile: minimal, with a small animation on the left (shown here with `lava`):
 
 ```
+Adriko  xhanajadrian@gmail.com
 ▀▀▀▀▀▀▀▀  ~/repos/active/claude-statusline   adrian-x364   opus 5.5 ▄   🌦️ 13°C
 ▀▀▀▀▀▀▀▀  ~/repos/active/claude-statusline/docs on main ● 3  ↑ 1  +152 −51 synced 12m ago
 ▀▀▀▀▀▀▀▀  12m11s ✦ 2m30s   $0.97 Σ $19.52   5h 48% ⏲ ▅   ctx 8%   v2.1.296
 ```
+
+The very top line, above the animation, is the Claude account this session is logged in as (name and email,
+in its own colour). It is read from the `.claude.json` of the config dir in use (`$CLAUDE_CONFIG_DIR`, or `~/.claude.json`),
+so if you run two subscriptions side by side (say `claude` and a launcher that sets `CLAUDE_CONFIG_DIR=~/.claude-egn`)
+each one shows its own. It is on every layout, and left out when there is no login (an API key).
 
 Line 1 is where the session **started** (blue), line 2 is where it **is now** (orange), one under the other.
 After the start dir comes the GitHub account `gh` is logged in as, read from `~/.config/gh/hosts.yml` (no network), so you can

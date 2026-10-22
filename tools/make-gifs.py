@@ -84,6 +84,7 @@ def draw(rows, cw, ch, font, ncols=None, pad=0):
 
 def run(home, profile, fx, mood, t):
     env = dict(os.environ, HOME=home, STATUSLINE_PROFILE=profile, ART_FX=fx, ART_MOOD=mood, ART_T=f"{t:.3f}")
+    env.pop("CLAUDE_CONFIG_DIR", None)  # no account line from your real login in the gifs
     inp = INPUT % (os.path.expanduser("~"), int(t) + 7560)
     out = subprocess.run(["bash", SCRIPT], input=inp, capture_output=True, text=True, env=env).stdout
     return out.replace(os.path.expanduser("~"), "~")  # the throwaway HOME hides the real one from the script
