@@ -40,7 +40,7 @@ Or just ask Claude: *"switch my status line to snake"*.
 
 ### Which names can I use?
 
-Any of these. Each one keeps the same 3-line layout and only swaps the animation on the left:
+Any of these. Each one keeps the same boxed layout and only swaps the animation on the left:
 
 | | | | |
 |:-:|:-:|:-:|:-:|
@@ -54,7 +54,7 @@ These three change the layout instead:
 
 | name | what you get |
 |---|---|
-| `xhanAI` | the 3-line layout with the art from `~/.claude/statusline-art` (rain if you never set it) |
+| `xhanAI` | the boxed layout with the art from `~/.claude/statusline-art` (rain if you never set it) |
 | `simple` | the plainest bar, 2 lines (`default` also works) |
 | `max` | everything there is, 4 lines |
 
@@ -121,34 +121,35 @@ user@host ~/repos/x ⎇ main ● 3 ↑1 │ cpu 4% ram 49% 38°C │ 🌦️ 13�
 - Past 90% of the 5h limit the rain turns red and a blinking `⚠ SLOW DOWN` appears.
 - Git branch, dirty file count (or ✔), ahead/behind; CPU load, RAM, CPU temperature; weather from wttr.in (cached 30 min, fetched in the background).
 
-The **xhanAI** profile: minimal, with a small animation on the left (shown here with `lava`):
+The **xhanAI** profile: two boxes next to a small animation (shown here with `lava`):
 
 ```
-Adriko  xhanajadrian@gmail.com
-▀▀▀▀▀▀▀▀  ~/repos/active/claude-statusline   adrian-x364   opus 5.5 ▄   🌦️ 13°C
-▀▀▀▀▀▀▀▀  ~/repos/active/claude-statusline/docs on main ● 3  ↑ 1  +152 −51 synced 12m ago
-▀▀▀▀▀▀▀▀  12m11s ✦ 2m30s   $0.97 Σ $19.52   5h 48% ⏲ ▅   ctx 8%   v2.1.296
+          ╭─ workspace ─────────────────────────────────╮ ╭─ session ─────────────────────────╮
+▀▀▀▀▀▀▀▀  │ start ~/repos/active/claude-statusline      │ │ opus 5.5 · 1M ▄    ctx ▁   8%     │
+▀▀▀▀▀▀▀▀  │   cwd ~/repos/active/claude-statusline/docs │ │ 12m11s ✦ 2m30s     5h  ▄  48% ⏲ ▅ │
+▀▀▀▀▀▀▀▀  │   git main ● 3 ↑1  +152 −51  synced 12m ago │ │ $0.97 Σ $19.52                    │
+          ╰─ Adriko · adrian-x364 ───────────────────────╯ ╰─────────────────────────── 13°C ─╯
 ```
 
-The very top line, above the animation, is the Claude account this session is logged in as (name and email,
-in its own colour). It is read from the `.claude.json` of the config dir in use (`$CLAUDE_CONFIG_DIR`, or `~/.claude.json`),
-so if you run two subscriptions side by side (say `claude` and a launcher that sets `CLAUDE_CONFIG_DIR=~/.claude-egn`)
-each one shows its own. It is on every layout, and left out when there is no login (an API key).
+**workspace** is where you are. `start` is where the session **started** (blue), `cwd` is where it **is now** (orange).
+`git` is the branch, then `● 3` changed files, then the remote: `↑2` commits not pushed, `↓1` commits to pull
+(as of the last fetch), `✓` in sync, `no remote` if the branch was never pushed. Then the lines changed this session,
+and `synced 12m ago`, the last fetch, pull or push. The status line never fetches by itself; run `git fetch` to refresh ↓.
 
-Line 1 is where the session **started** (blue), line 2 is where it **is now** (orange), one under the other.
-After the start dir comes the GitHub account `gh` is logged in as, read from `~/.config/gh/hosts.yml` (no network), so you can
-tell your work and home logins apart; each account gets its own colour, and `gh auth switch` shows up within a second.
+The bottom edge says **who**: the Claude account this session is logged in as, then the GitHub account `gh` is
+logged in as, each in its own colour. The Claude account is read from the `.claude.json` of the config dir in use
+(`$CLAUDE_CONFIG_DIR`, or `~/.claude.json`), so if you run several subscriptions side by side (say `claude` and a
+launcher that sets `CLAUDE_CONFIG_DIR=~/.claude-egn`) each one shows its own. The `gh` account comes from
+`~/.config/gh/hosts.yml` (no network), and `gh auth switch` shows up within a second. On the `simple` and `max`
+layouts the Claude account gets its own line at the very top instead.
 
-After the branch: `● 3` changed files, then the remote: `↑ 2` commits not pushed, `↓ 1` commits to pull
-(as of the last fetch), `✓` in sync, `no remote` if the branch was never pushed, and `synced 12m ago`,
-the last fetch, pull or push. The status line never fetches by itself; run `git fetch` to refresh ↓.
+**session** is the numbers. Left: the model with its context size and the effort, a one-column level meter that fills
+from the bottom (`▂` low, `▄` medium, `▅` high, `▇` xhigh, `█` max); session time and Claude time; session cost and
+the all-time total of the project. Right: context and the 5h limit, each with a one-column meter `▁`..`█` that fills
+with the percentage. After the 5h limit, `⏲` and a block show the reset charging up like a battery: `▂` red when the
+window has just started, through `▄ ▅ ▇`, to `█` green when the reset is close. The weather sits on the bottom edge.
 
-Nothing on line 1 changes during a session, so it can carry the model, effort and weather without anything
-shifting. The effort is a one-column level meter that fills from the bottom: `▂` low, `▄` medium, `▅` high, `▇` xhigh, `█` max.
-Line 2 is the current path and branch, with the lines changed this session just before `synced`. Line 3 is the
-numbers: session time, Claude time, session cost + project total, the 5h limit, context, and the version last.
-After the 5h limit, `⏲` and a block in the same style as the effort show the reset charging up like a
-battery: `▂` red when the window has just started, through `▄ ▅ ▇`, to `█` green when the reset is close.
+A box only ever grows during a session, never shrinks back, so the two boxes don't jump around as the numbers change.
 
 ### The lava
 
@@ -191,7 +192,7 @@ The same canvas can draw other things, borrowed from the badtrippin experiments 
 | orbit | strokes only: a tiny globe outline with three satellites orbiting it, see-through (braille, 16x12 dots) |
 | smiley | the classic yellow smiley as pixel art (sextants, 16x9), whose expression is the mood: smiles and blinks (calm), focuses with darting eyes (working), grins and sweats (fire), sleeps with a z (idle), frets (warn), gasps (alarm), beams ^^ (clean) |
 | planet | a lit, turning lava planet with an atmosphere, in a see-through sky (sextants, see below) |
-| rain | the 3-row matrix rain, in katakana letters or braille dots (default) |
+| rain | the 8x3 matrix rain, in katakana letters or braille dots (default) |
 
 The effects keep their own colours and wear the mood on top: busy makes them faster and brighter,
 idle dims and slows them, warn tints amber, alarm pulses red, clean flashes green.

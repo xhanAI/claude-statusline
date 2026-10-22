@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Claude Code status line.
-#   profile: ~/.claude/statusline-profile  -> "xhanAI" (3 lines, the default), "simple" (2 lines), "max" (everything, 4 lines)
+#   profile: ~/.claude/statusline-profile  -> "xhanAI" (two boxes, the default), "simple" (2 lines), "max" (everything, 4 lines)
 #            or any art effect below (rain, lava, acid, snake, ...): the xhanAI layout with that art
 #   art:     ~/.claude/statusline-art      -> the art the plain "xhanAI" profile shows: "rain" (default), "lava", or any effect
 #   rain:    ~/.claude/statusline-rain     -> "letters" (default) or "dots"
@@ -90,6 +90,17 @@ claude_account() {
 R=$'\033[0m'; DIM=$'\033[2m'; B=$'\033[1m'
 fg() { printf '\033[38;2;%s;%s;%sm' "$1" "$2" "$3"; }
 SEP="${DIM}$(fg 110 110 140) │ ${R}"
+
+# for the boxes (they set variables instead of printing, to save a fork per call):
+#   vlen: the width a string takes on screen, colour codes left out -> $VL
+#   cell: a string padded out to a width -> $CL      dash: a run of ─ -> $DS
+#   meter: a one-column meter ▁..█ for a percentage, in the heat colour
+vlen() { local LC_ALL=C.UTF-8; local s=$1 t=""
+  while [[ $s == *$'\033'* ]]; do t+=${s%%$'\033'*}; s=${s#*$'\033'}; s=${s#*m}; done; VL=$(( ${#t} + ${#s} )); }
+cell() { vlen "$1"; printf -v CL '%s%*s' "$1" $(( $2 > VL ? $2 - VL : 0 )) ''; }
+dash() { printf -v DS '%*s' $(( $1 > 0 ? $1 : 0 )) ''; DS=${DS// /─}; }
+meter() { local p=${1%.*} b=(▁ ▂ ▃ ▄ ▅ ▆ ▇ █) i; i=$(( ${p:-0} * 8 / 100 )); [ "$i" -gt 7 ] && i=7; [ "$i" -lt 0 ] && i=0
+  printf '%s%s%s' "$(heat "$1")" "${b[i]}" "$R"; }
 
 fmt() { local s=$(( $1 / 1000 ))
   if [ "$s" -ge 86400 ]; then printf "%dd%02dh" $((s/86400)) $((s%86400/3600))
@@ -260,7 +271,7 @@ rain2() {
   local rl=(1 2 4 64) rr=(8 16 32 128)
   local glyphs=(ｱ ｲ ｳ ｴ ｵ ｶ ｷ ｸ ｹ ｺ ｻ ｼ ｽ ｾ ｿ ﾀ ﾁ ﾂ ﾃ ﾄ ﾅ ﾆ ﾇ ﾈ ﾉ ﾊ ﾋ ﾌ ﾍ ﾎ ﾏ ﾐ ﾑ ﾒ ﾓ ﾔ ﾕ ﾖ ﾗ ﾘ ﾙ ﾚ ﾛ ﾜ ﾝ 0 1 2 3 4 5 7 8 9)
   local style; style=$(cat "$HOME/.claude/statusline-rain" 2>/dev/null)
-  for c in 0 1 2 3 4 5; do
+  for c in 0 1 2 3 4 5 6 7; do   # 8 columns, as wide as the other art
     p=$(( (now * 2 + c * 5 + c * c) % 15 ))      # head position 0..14 (12+ = off screen)
     side=$(( (now / 5 + c) % 2 ))
     bits=0; best=9
@@ -730,62 +741,72 @@ render_xhanai() {
     canvas "$art" "${ART_T:-$now}" "$(art_mood)"; P0=${ART[0]}; P1=${ART[1]}; P2=${ART[2]}
   fi
 
-  # line 1, where it started + who: start dir, gh account, model + effort, weather.
-  # none of these change during a session, so nothing on this line ever shifts
-  local gu; gu=$(gh_user)
-  L="$P0  $(fg 110 170 255)${B}${start/#$HOME/\~}${R}"
-  [ -n "$gu" ] && L+="${SP}$(gh_colour "$gu")${B}${gu}${R}"
-  [ -n "$model" ] && L+="${SP}$(fg 255 170 100)${model,,}${R}"
+
+  # two boxes next to the art, one row per art row:
+  #   workspace: start dir, current dir, git; the bottom edge says who (Claude account · gh account)
+  #   session:   model + effort, times, money | context, 5h limit + reset; the bottom edge has the weather
+  # a box (and the session box's left column) only ever grows during a session, so nothing jumps back and forth
+  local BX; BX=$(fg 105 105 140)
+  local wst="$st.w" w1=0 lc=0 w2=0 o1 olc o2
+  [ -f "$wst" ] && read -r w1 lc w2 < "$wst"
+  o1=$w1 olc=$lc o2=$w2
+
+  local A1 A2 A3 F1="" gu; gu=$(gh_user)
+  A1="${GR}start${R} $(fg 110 170 255)${B}${start/#$HOME/\~}${R}"
+  A2="${GR}  cwd${R} $(fg 255 150 60)${B}${cwd/#$HOME/\~}${R}"
+  A3="${GR}  git${R} "
+  if [ -n "$br" ]; then
+    A3+="$(fg 200 150 255)${br}${R}"
+    [ "$dirty" -gt 0 ] && A3+=" $(fg 250 200 70)● ${dirty}${R}"
+    # sync with the remote: ↑ unpushed commits, ↓ commits to pull (as of the last fetch), ✓ in sync
+    if [ -z "$up" ]; then A3+=" ${GR}no remote${R}"
+    else
+      [ "${ahead:-0}" -gt 0 ] && A3+=" $(fg 120 220 255)↑${ahead}${R}"
+      [ "${behind:-0}" -gt 0 ] && A3+=" $(fg 255 150 90)↓${behind}${R}"
+      [ "${ahead:-0}" -eq 0 ] && [ "${behind:-0}" -eq 0 ] && A3+=" $(fg 80 220 140)✓${R}"
+    fi
+  else
+    A3+="${GR}—${R}"
+  fi
+  # lines changed this session, then the last time we talked to the remote
+  # (fetch / pull write FETCH_HEAD, fetch / pull / push the upstream's reflog)
+  [ -n "$added" ] && A3+="  $(fg 80 220 140)+${added}${R} $(fg 255 95 95)−${removed:-0}${R}"
+  if [ -n "$up" ]; then
+    local seen; seen=$(stat -c %Y "$gitdir/FETCH_HEAD" "$gitdir/logs/refs/remotes/$up" 2>/dev/null | sort -n | tail -1)
+    if [ -n "$seen" ]; then
+      if [ $(( now - seen )) -lt 60 ]; then A3+="  ${GR}synced just now${R}"; else A3+="  ${GR}synced $(ago $(( now - seen ))) ago${R}"; fi
+    fi
+  fi
+  [ -n "$aname$amail" ] && F1="$(gh_colour "${amail:-$aname}")${B}${aname:-$amail}${R}"
+  [ -n "$gu" ] && F1+="${F1:+ ${GR}·${R} }$(gh_colour "$gu")${gu}${R}"
+
+  # session, left column
+  local S1 S2 S3 T1 T2 T3=""
+  S1="$(fg 255 170 100)${model%% (*}"; S1=${S1,,}
+  if [ -n "$csize" ] && [ "$csize" -gt 0 ]; then
+    if [ "$csize" -ge 1000000 ]; then S1+=" ${GR}·${R} $(fg 255 170 100)$(( csize / 1000000 ))M"; else S1+=" ${GR}·${R} $(fg 255 170 100)$(( csize / 1000 ))k"; fi
+  fi
+  S1+="$R"
   # effort as a one-column level meter: the block fills up from the bottom, low ▂ .. max █,
   # and warms from yellow to red as it rises
   local lv=0 bars=(▂ ▄ ▅ ▇ █)
   case $effort in low) lv=1 ;; medium) lv=2 ;; high) lv=3 ;; xhigh) lv=4 ;; max) lv=5 ;; esac
-  [ "$lv" -gt 0 ] && L+=" $(fg 255 $(( 230 - lv * 30 )) $(( 140 - lv * 25 )))${bars[lv-1]}${R}"
-  local wf="$HOME/.cache/claude-statusline-weather"
-  if [ ! -f "$wf" ] || [ $(( now - $(stat -c %Y "$wf") )) -gt 1800 ]; then
-    mkdir -p "${wf%/*}"; touch "$wf"
-    ( curl -s -m 5 'https://wttr.in/?format=%c%t' > "$wf.tmp" && mv "$wf.tmp" "$wf" ) >/dev/null 2>&1 &
-  fi
-  w=$(tr -d '\n+' < "$wf" 2>/dev/null | sed 's/  */ /g')
-  [ -n "$w" ] && [ ${#w} -lt 20 ] && L+="${SP}${w}"
-  printf '%s\n' "$L"
-
-  # line 2, where it is now: current dir + branch, right under the start dir, alone on the line
-  # so their changing length never shifts anything else
-  L="$P1  $(fg 255 150 60)${B}${cwd/#$HOME/\~}${R}"
-  # lines changed this session; they go just before "synced" (or at the end when there's no sync to show)
-  local D=""; [ -n "$added" ] && D="  $(fg 80 220 140)+${added}${R} $(fg 255 95 95)−${removed:-0}${R}"
-  if [ -n "$br" ]; then
-    L+=" ${GR}on${R} $(fg 200 150 255)${br}${R}"
-    [ "$dirty" -gt 0 ] && L+=" $(fg 250 200 70)● ${dirty}${R}"
-    # sync with the remote: ↑ unpushed commits, ↓ commits to pull (as of the last fetch), ✓ in sync
-    if [ -z "$up" ]; then L+="  ${GR}no remote${R}"
-    else
-      [ "${ahead:-0}" -gt 0 ] && L+="  $(fg 120 220 255)↑ ${ahead}${R}"
-      [ "${behind:-0}" -gt 0 ] && L+="  $(fg 255 150 90)↓ ${behind}${R}"
-      [ "${ahead:-0}" -eq 0 ] && [ "${behind:-0}" -eq 0 ] && L+="  $(fg 80 220 140)✓${R}"
-      # last time we talked to the remote: fetch / pull write FETCH_HEAD, fetch / pull / push the upstream's reflog
-      local seen; seen=$(stat -c %Y "$gitdir/FETCH_HEAD" "$gitdir/logs/refs/remotes/$up" 2>/dev/null | sort -n | tail -1)
-      if [ -n "$seen" ]; then
-        L+="$D"; D=""
-        if [ $(( now - seen )) -lt 60 ]; then L+=" ${GR}synced just now${R}"; else L+=" ${GR}synced $(ago $(( now - seen ))) ago${R}"; fi
-      fi
-    fi
-  fi
-  printf '%s\n' "$L$D"
-
-  # line 3, numbers: times, money, limit, context, diff
-  L="$P2 "
-  [ -n "$total" ] && L+=" $(fg 130 180 255)$(fmt "${total%.*}")${R}"
-  [ -n "$api" ] && L+=" $(fg 217 119 87)✦ $(fmt "${api%.*}")${R}"
+  [ "$lv" -gt 0 ] && S1+=" $(fg 255 $(( 230 - lv * 30 )) $(( 140 - lv * 25 )))${bars[lv-1]}${R}"
+  S2=""
+  [ -n "$total" ] && S2+="$(fg 130 180 255)$(fmt "${total%.*}")${R}"
+  [ -n "$api" ] && S2+="${S2:+ }$(fg 217 119 87)✦ $(fmt "${api%.*}")${R}"
+  S3=""
   if [ -n "$cost" ]; then
-    L+="${SP}$(fg 240 200 90)\$$(printf '%.2f' "$cost")${R}"
+    S3="$(fg 240 200 90)\$$(printf '%.2f' "$cost")${R}"
     # all-time cost of the project this session was started in (every session started there)
     local pt; pt=$(project_total)
-    [ -n "$pt" ] && [ "$pt" != 0.00 ] && L+=" ${GR}Σ${R} $(fg 240 200 90)\$${pt}${R}"
+    [ -n "$pt" ] && [ "$pt" != 0.00 ] && S3+=" ${GR}Σ${R} $(fg 240 200 90)\$${pt}${R}"
   fi
+  # session, right column: context and the 5h limit as one-column meters that fill with the percentage
+  T1=""; T2=""
+  [ -n "$used" ] && T1="${GR}ctx${R} $(meter "$used") $(heat "$used")$(printf '%3.0f' "$used")%${R}"
   if [ -n "$five" ]; then
-    L+="${SP}${GR}5h${R} $(heat "$five")$(printf '%.0f' "$five")%${R}"
+    T2="${GR}5h ${R} $(meter "$five") $(heat "$five")$(printf '%3.0f' "$five")%${R}"
     # the 5h reset as a battery charging back up: ⏲ and a one-column block like the effort that fills
     # from ▂ (window just started, red) to █ (about to reset, green).
     # some fonts draw ⏲ as a wide emoji, so a space keeps it off the block
@@ -795,26 +816,62 @@ render_xhanai() {
         chg=$(( 100 - left ))
         if [ "$chg" -gt 80 ]; then blk=█; elif [ "$chg" -gt 60 ]; then blk=▇; elif [ "$chg" -gt 40 ]; then blk=▅
         elif [ "$chg" -gt 20 ]; then blk=▄; else blk=▂; fi
-        L+=" ${GR}⏲${R} $(fg $(( 255 - chg * 175 / 100 )) $(( 80 + chg * 140 / 100 )) $(( 80 + chg * 60 / 100 )))${blk}${R}"
+        T2+=" ${GR}⏲${R} $(fg $(( 255 - chg * 175 / 100 )) $(( 80 + chg * 140 / 100 )) $(( 80 + chg * 60 / 100 )))${blk}${R}"
       fi
     fi
   fi
-  [ -n "$used" ] && L+="${SP}${GR}ctx${R} $(heat "$used")$(printf '%.0f' "$used")%${R}"
-  [ -n "$ver" ] && L+="${SP}${GR}v${ver}${R}"
-  printf '%s\n' "$L"
+  # weather: cached for 30 min, refreshed in the background so the bar never waits on the network.
+  # only the temperature is shown: the weather icon is a wide emoji that would knock the border out of line
+  local wf="$HOME/.cache/claude-statusline-weather" temp=""
+  if [ ! -f "$wf" ] || [ $(( now - $(stat -c %Y "$wf") )) -gt 1800 ]; then
+    mkdir -p "${wf%/*}"; touch "$wf"
+    ( curl -s -m 5 'https://wttr.in/?format=%c%t' > "$wf.tmp" && mv "$wf.tmp" "$wf" ) >/dev/null 2>&1 &
+  fi
+  w=$(<"$wf") 2>/dev/null
+  [[ $w =~ ([-+]?[0-9]+°[CF]) ]] && temp=${BASH_REMATCH[1]#+}
+
+  # widths
+  local x
+  for x in "$A1" "$A2" "$A3"; do vlen "$x"; [ "$VL" -gt "$w1" ] && w1=$VL; done
+  vlen "$F1"; [ $(( VL + 2 )) -gt "$w1" ] && w1=$(( VL + 2 ))
+  for x in "$S1" "$S2" "$S3"; do vlen "$x"; [ "$VL" -gt "$lc" ] && lc=$VL; done
+  local r1 r2 r3
+  cell "$S1" $(( lc + 4 )); r1=$CL$T1; cell "$S2" $(( lc + 4 )); r2=$CL$T2; cell "$S3" $(( lc + 4 )); r3=$CL$T3
+  for x in "$r1" "$r2" "$r3"; do vlen "$x"; [ "$VL" -gt "$w2" ] && w2=$VL; done
+  vlen "$temp"; local tl=$VL; [ $(( tl + 2 )) -gt "$w2" ] && w2=$(( tl + 2 ))
+  [ "$w1 $lc $w2" != "$o1 $olc $o2" ] && { mkdir -p "${st%/*}"; echo "$w1 $lc $w2" > "$wst"; }
+
+  # draw: the rows sit next to the art, the edges are indented to line up with them. Claude Code drops
+  # leading spaces from a status line, so the indent starts with a braille blank (U+2800), which looks
+  # like a space but isn't one (written as bytes, so it works in any locale)
+  local pad top1 top2 bot1 bot2
+  printf -v pad '\xe2\xa0\x80%*s' 9 ''
+  dash $(( w1 - 10 )); top1="${BX}╭─ ${GR}workspace${BX} ${DS}╮${R}"
+  dash $(( w2 - 8 )); top2="${BX}╭─ ${GR}session${BX} ${DS}╮${R}"
+  if [ -n "$F1" ]; then vlen "$F1"; dash $(( w1 - VL - 1 )); bot1="${BX}╰─ ${F1}${BX} ${DS}╯${R}"
+  else dash $(( w1 + 2 )); bot1="${BX}╰${DS}╯${R}"; fi
+  if [ -n "$temp" ]; then dash $(( w2 - tl - 1 )); bot2="${BX}╰${DS} ${GR}${temp}${BX} ─╯${R}"
+  else dash $(( w2 + 2 )); bot2="${BX}╰${DS}╯${R}"; fi
+  local V="${BX}│${R}" a
+  printf '%s\n' "$pad$top1 $top2"
+  cell "$A1" "$w1"; a=$CL; cell "$r1" "$w2"; printf '%s\n' "$P0  $V $a $V $V $CL $V"
+  cell "$A2" "$w1"; a=$CL; cell "$r2" "$w2"; printf '%s\n' "$P1  $V $a $V $V $CL $V"
+  cell "$A3" "$w1"; a=$CL; cell "$r3" "$w2"; printf '%s\n' "$P2  $V $a $V $V $CL $V"
+  printf '%s\n' "$pad$bot1 $bot2"
 }
 
-# the very top line, above every layout: which Claude account this is, in its own colour
+# which Claude account this is: on the edge of the workspace box in the xhanAI layouts,
+# its own line at the very top of the others, in its own colour
 IFS=$'\t' read -r aname amail < <(claude_account)
-if [ -n "$aname$amail" ]; then
-  L="$(gh_colour "${amail:-$aname}")${B}${aname:-$amail}${R}"
+account_line() {
+  [ -n "$aname$amail" ] || return
+  local L="$(gh_colour "${amail:-$aname}")${B}${aname:-$amail}${R}"
   [ -n "$aname" ] && [ -n "$amail" ] && L+="  $(fg 120 120 145)${amail}${R}"
-  printf '%s\n' "$L"
-fi
+  printf '%s\n' "$L"; }
 
 case $profile in
-  max) render_max ;;
+  max) account_line; render_max ;;
   xhanAI|xhanai) render_xhanai ;;
   rain|lava|acid|tunnel|aurora|ember|warp|pulse|helix|ripple|ecg|hourglass|life|snake|orbit|planet|smiley) ART_FX=$profile render_xhanai ;;   # xhanAI layout, other art
-  *) render_default ;;
+  *) account_line; render_default ;;
 esac
